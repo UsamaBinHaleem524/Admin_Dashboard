@@ -2,25 +2,34 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, ShoppingCart, Package, Users, Truck, LogOut, Menu, X } from "lucide-react"
+import { LayoutDashboard, ShoppingCart, Package, Users, Truck, LogOut, Menu, X, CreditCard, ReceiptIcon } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Sales", href: "/sales", icon: ShoppingCart },
-  { name: "Purchases", href: "/purchases", icon: Package },
-  { name: "Customer Ledger", href: "/customer-ledger", icon: Users },
-  { name: "Supplier Ledger", href: "/supplier-ledger", icon: Truck },
+  { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  { name: "Sales", path: "/sales", icon: ShoppingCart },
+  { name: "Purchases", path: "/purchases", icon: Package },
+  { name: "Customer Ledger", path: "/customer-ledger", icon: Users },
+  { name: "Supplier Ledger", path: "/supplier-ledger", icon: Truck },
+  { name: "Puchase Orders", path: "/purchase-order", icon: CreditCard },
+  { name: "Invoices", path: "/invoices", icon: ReceiptIcon },
+  { name: "Quotation", path: "/quotation", icon: CreditCard },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { logout } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
 
   const toggleSidebar = () => setIsOpen(!isOpen)
+
+  const handleNavigation = (path: string) => {
+    router.push(path)
+    setIsOpen(false) // Close sidebar on navigation (mobile)
+  }
 
   return (
     <>
@@ -54,11 +63,14 @@ export function Sidebar() {
             return (
               <Link
                 key={item.name}
-                href={item.href}
-                onClick={() => setIsOpen(false)} // Close sidebar on link click (mobile)
+                href={item.path}
+                onClick={(e) => {
+                  e.preventDefault() // Prevent default link behavior
+                  handleNavigation(item.path)
+                }}
                 className={cn(
                   "flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                  pathname === item.href ? "bg-gray-900 text-white" : "text-gray-300 hover:bg-gray-700 hover:text-white"
+                  pathname === item.path ? "bg-gray-900 text-white" : "text-gray-300 hover:bg-gray-700 hover:text-white"
                 )}
               >
                 <Icon className="mr-3 h-5 w-5" />

@@ -10,33 +10,27 @@ import { cn } from "@/lib/utils"
 interface CustomerTransaction {
   id: string
   customer: string
-  type: "payment" | "sale"
-  amount: number
+  unit: "yard" | "meter"
   description: string
   date: string
-}
-
-interface CustomerBalance {
-  customer: string
-  totalSales: number
-  totalPayments: number
-  balance: number
+  totalAmount: number
+  givenAmount: number
+  remainingAmount: number
 }
 
 export default function CustomerLedgerPage() {
   const [transactions, setTransactions] = useState<CustomerTransaction[]>([])
   const [filteredTransactions, setFilteredTransactions] = useState<CustomerTransaction[]>([])
-  const [customerBalances, setCustomerBalances] = useState<CustomerBalance[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [activeTab, setActiveTab] = useState("transactions")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<CustomerTransaction | null>(null)
   const [formData, setFormData] = useState({
     customer: "",
-    type: "payment" as "payment" | "sale",
-    amount: "",
+    unit: "yard" as "yard" | "meter",
     description: "",
-    date: "",
+    totalAmount: "",
+    givenAmount: "",
+    remainingAmount: "",
   })
   const { showToast } = useToast()
 
@@ -46,7 +40,6 @@ export default function CustomerLedgerPage() {
 
   useEffect(() => {
     filterTransactions()
-    calculateBalances()
   }, [transactions, searchTerm])
 
   const loadTransactions = () => {
@@ -76,46 +69,27 @@ export default function CustomerLedgerPage() {
     }
   }
 
-  const calculateBalances = () => {
-    const balanceMap = new Map<string, CustomerBalance>()
-
-    transactions.forEach((transaction) => {
-      if (!balanceMap.has(transaction.customer)) {
-        balanceMap.set(transaction.customer, {
-          customer: transaction.customer,
-          totalSales: 0,
-          totalPayments: 0,
-          balance: 0,
-        })
-      }
-
-      const balance = balanceMap.get(transaction.customer)!
-      if (transaction.type === "sale") {
-        balance.totalSales += transaction.amount
-      } else {
-        balance.totalPayments += transaction.amount
-      }
-      balance.balance = balance.totalSales - balance.totalPayments
-    })
-
-    setCustomerBalances(Array.from(balanceMap.values()))
-  }
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.customer || !formData.amount || !formData.description || !formData.date) {
-      showToast("Please fill in all fields", "error")
+    if (!formData.customer || !formData.description || !formData.totalAmount || !formData.givenAmount) {
+      showToast("Please fill in all required fields", "error")
       return
     }
+
+    const totalAmount = Number.parseFloat(formData.totalAmount)
+    const givenAmount = Number.parseFloat(formData.givenAmount)
+    const remainingAmount = totalAmount - givenAmount
 
     const transactionData: CustomerTransaction = {
       id: editingTransaction ? editingTransaction.id : Date.now().toString(),
       customer: formData.customer,
-      type: formData.type,
-      amount: Number.parseFloat(formData.amount),
+      unit: formData.unit,
       description: formData.description,
-      date: formData.date,
+      date: new Date().toISOString().split('T')[0], // Current date
+      totalAmount,
+      givenAmount,
+      remainingAmount,
     }
 
     let newTransactions: CustomerTransaction[]
@@ -138,10 +112,11 @@ export default function CustomerLedgerPage() {
     setEditingTransaction(transaction)
     setFormData({
       customer: transaction.customer,
-      type: transaction.type,
-      amount: transaction.amount.toString(),
+      unit: transaction.unit,
       description: transaction.description,
-      date: transaction.date,
+      totalAmount: transaction.totalAmount.toString(),
+      givenAmount: transaction.givenAmount.toString(),
+      remainingAmount: transaction.remainingAmount.toString(),
     })
     setIsDialogOpen(true)
   }
@@ -155,13 +130,26 @@ export default function CustomerLedgerPage() {
   }
 
   const resetForm = () => {
-    setFormData({ customer: "", type: "payment", amount: "", description: "", date: "" })
+    setFormData({
+      customer: "",
+      unit: "yard",
+      description: "",
+      totalAmount: "",
+      givenAmount: "",
+      remainingAmount: "",
+    })
     setEditingTransaction(null)
   }
 
   const openAddDialog = () => {
     resetForm()
     setIsDialogOpen(true)
+  }
+
+  const calculateRemainingAmount = () => {
+    const total = Number.parseFloat(formData.totalAmount) || 0
+    const given = Number.parseFloat(formData.givenAmount) || 0
+    return (total - given).toFixed(2)
   }
 
   return (
@@ -171,7 +159,7 @@ export default function CustomerLedgerPage() {
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Customer Ledger</h1>
-            <p className="text-sm sm:text-base text-gray-600">Manage customer transactions and balances</p>
+            <p className="text-sm sm:text-base text-gray-600">Manage customer transactions</p>
           </div>
           <button
             onClick={openAddDialog}
@@ -182,191 +170,108 @@ export default function CustomerLedgerPage() {
           </button>
         </div>
 
-        {/* Tabs */}
+        {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-4 sm:space-x-8 px-4 sm:px-6 overflow-x-auto">
-              <button
-                onClick={() => setActiveTab("transactions")}
-                className={cn(
-                  "py-4 px-1 border-b-2 font-medium text-sm sm:text-base whitespace-nowrap",
-                  activeTab === "transactions"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                )}
-              >
-                Transaction History
-              </button>
-              <button
-                onClick={() => setActiveTab("balances")}
-                className={cn(
-                  "py-4 px-1 border-b-2 font-medium text-sm sm:text-base whitespace-nowrap",
-                  activeTab === "balances"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                )}
-              >
-                Customer Balance
-              </button>
-            </nav>
+          <div className="p-4 sm:p-6 border-b">
+            <div className="flex items-center space-x-2">
+              <Search className="h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by customer, description, or date..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+              />
+            </div>
           </div>
-
-          {activeTab === "transactions" && (
-            <div>
-              <div className="p-4 sm:p-6 border-b">
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Transaction History</h3>
-                <div className="flex items-center space-x-2">
-                  <Search className="h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by customer, description, or date..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full sm:w-auto flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Customer
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Description
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredTransactions.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
-                          No transactions found
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredTransactions.map((transaction) => (
-                        <tr key={transaction.id} className="hover:bg-gray-50">
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
-                            {transaction.customer}
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={cn(
-                                "px-2 py-1 rounded-full text-xs sm:text-sm font-medium",
-                                transaction.type === "sale"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-blue-100 text-blue-800"
-                              )}
-                            >
-                              {transaction.type}
-                            </span>
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                            ${transaction.amount.toFixed(2)}
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
-                            {transaction.description}
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                            {transaction.date}
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => handleEdit(transaction)}
-                                className="p-1 text-blue-600 hover:text-blue-800"
-                              >
-                                <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(transaction.id)}
-                                className="p-1 text-red-600 hover:text-red-800"
-                              >
-                                <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "balances" && (
-            <div>
-              <div className="p-4 sm:p-6 border-b">
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Customer Balances</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Customer
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Sales
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Payments
-                      </th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Balance
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {customerBalances.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
-                          No customer balances found
-                        </td>
-                      </tr>
-                    ) : (
-                      customerBalances.map((balance) => (
-                        <tr key={balance.customer} className="hover:bg-gray-50">
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
-                            {balance.customer}
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-green-600 font-medium text-sm sm:text-base">
-                            ${balance.totalSales.toFixed(2)}
-                          </td>
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-blue-600 font-medium text-sm sm:text-base">
-                            ${balance.totalPayments.toFixed(2)}
-                          </td>
-                          <td
-                            className={cn(
-                              "px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-sm sm:text-base",
-                              balance.balance >= 0 ? "text-green-600" : "text-red-600"
-                            )}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Unit
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Amount
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Given Amount
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Remaining Amount
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                      No transactions found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-gray-50">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
+                        {transaction.customer}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {transaction.unit}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
+                        {transaction.description}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {transaction.date}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        ${transaction.totalAmount.toFixed(2)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        ${transaction.givenAmount.toFixed(2)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base",
+                          transaction.remainingAmount < 0 ? "text-red-800" : "text-green-800"
+                        )}
+                      >
+                        ${transaction.remainingAmount.toFixed(2)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEdit(transaction)}
+                            className="p-1 text-blue-600 hover:text-blue-800"
                           >
-                            ${balance.balance.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+                            <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(transaction.id)}
+                            className="p-1 text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Modal */}
@@ -391,32 +296,18 @@ export default function CustomerLedgerPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                    Type
+                  <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit
                   </label>
                   <select
-                    id="type"
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as "payment" | "sale" })}
+                    id="unit"
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value as "yard" | "meter" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   >
-                    <option value="payment">Payment</option>
-                    <option value="sale">Sale</option>
+                    <option value="yard">Yard</option>
+                    <option value="meter">Meter</option>
                   </select>
-                </div>
-                <div>
-                  <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount
-                  </label>
-                  <input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="Enter amount"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
                 </div>
                 <div>
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
@@ -432,15 +323,43 @@ export default function CustomerLedgerPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                    Date
+                  <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Amount
                   </label>
                   <input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    id="totalAmount"
+                    type="number"
+                    step="0.01"
+                    value={formData.totalAmount}
+                    onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
+                    placeholder="Enter total amount"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="givenAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                    Given Amount
+                  </label>
+                  <input
+                    id="givenAmount"
+                    type="number"
+                    step="0.01"
+                    value={formData.givenAmount}
+                    onChange={(e) => setFormData({ ...formData, givenAmount: e.target.value })}
+                    placeholder="Enter given amount"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="remainingAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                    Remaining Amount
+                  </label>
+                  <input
+                    id="remainingAmount"
+                    type="text"
+                    value={calculateRemainingAmount()}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
