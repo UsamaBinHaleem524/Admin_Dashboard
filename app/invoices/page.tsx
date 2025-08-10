@@ -8,7 +8,14 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
 
+interface Product {
+  id: string
+  name: string
+  date: string
+}
+
 interface InvoiceItem {
+  itemName: string
   description: string
   quantity: number
   unit: string
@@ -20,24 +27,30 @@ interface InvoiceItem {
 interface Invoice {
   id: string
   date: string
+  invoiceType: "Simple" | "Proforma"
   items: InvoiceItem[]
   totalAmount: number
+  currency: "USD" | "PKR" | "SAR"
 }
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    items: [{ description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+    invoiceType: "Simple" as "Simple" | "Proforma",
+    items: [{ itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+    currency: "USD" as "USD" | "PKR" | "SAR",
   })
   const { showToast } = useToast()
 
   useEffect(() => {
     loadInvoices()
+    loadProducts()
   }, [])
 
   useEffect(() => {
@@ -52,6 +65,14 @@ export default function InvoicesPage() {
     }
   }
 
+  const loadProducts = () => {
+    const savedProducts = localStorage.getItem("products")
+    if (savedProducts) {
+      const parsedProducts = JSON.parse(savedProducts)
+      setProducts(parsedProducts)
+    }
+  }
+
   const saveInvoices = (newInvoices: Invoice[]) => {
     localStorage.setItem("invoices", JSON.stringify(newInvoices))
     setInvoices(newInvoices)
@@ -63,7 +84,13 @@ export default function InvoicesPage() {
     } else {
       const filtered = invoices.filter(
         (inv) =>
-          inv.id.toLowerCase().includes(searchTerm.toLowerCase())
+          inv.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          inv.invoiceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          inv.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          inv.items.some(item => 
+            item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.description.toLowerCase().includes(searchTerm.toLowerCase())
+          )
       )
       setFilteredInvoices(filtered)
     }
@@ -72,7 +99,7 @@ export default function InvoicesPage() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+      items: [...formData.items, { itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
     })
   }
 
@@ -103,11 +130,25 @@ export default function InvoicesPage() {
       .toFixed(2)
   }
 
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+    switch (currency) {
+      case "USD": return "$"
+      case "PKR": return "₨"
+      case "SAR": return "ر.س"
+      default: return ""
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (formData.items.some(item => !item.description || !item.quantity || !item.unit || !item.unitPrice || !item.vatPercentage)) {
+    if (formData.items.some(item => !item.itemName || !item.description || !item.quantity || !item.unit || !item.unitPrice || !item.vatPercentage)) {
       showToast("Please fill in all required fields for all items", "error")
+      return
+    }
+
+    if (!formData.invoiceType || !formData.currency) {
+      showToast("Please select an invoice type and currency", "error")
       return
     }
 
@@ -117,7 +158,9 @@ export default function InvoicesPage() {
     const invoiceData: Invoice = {
       id: invId,
       date: formData.date,
+      invoiceType: formData.invoiceType,
       items: formData.items.map(item => ({
+        itemName: item.itemName,
         description: item.description,
         quantity: Number.parseFloat(item.quantity),
         unit: item.unit,
@@ -126,6 +169,7 @@ export default function InvoicesPage() {
         amount: Number.parseFloat(item.amount),
       })),
       totalAmount,
+      currency: formData.currency,
     }
 
     let newInvoices: Invoice[]
@@ -148,7 +192,9 @@ export default function InvoicesPage() {
     setEditingInvoice(invoice)
     setFormData({
       date: invoice.date,
+      invoiceType: invoice.invoiceType,
       items: invoice.items.map(item => ({
+        itemName: item.itemName,
         description: item.description,
         quantity: item.quantity.toString(),
         unit: item.unit,
@@ -156,6 +202,7 @@ export default function InvoicesPage() {
         vatPercentage: item.vatPercentage.toString(),
         amount: item.amount.toString(),
       })),
+      currency: invoice.currency,
     })
     setIsDialogOpen(true)
   }
@@ -174,13 +221,13 @@ export default function InvoicesPage() {
       const pageWidth = doc.internal.pageSize.getWidth();
   
       // Logo (top-left corner)
-      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="; // Replace with your actual logo
-      doc.addImage(imgData, 'PNG', 10, 10, 30, 20); // (image, format, x, y, width, height)
+      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
   
       // Header - INVOICE title
       doc.setFontSize(20);
       doc.setFont("helvetica", "bold");
-      doc.text("INVOICE", pageWidth / 2, 30, { align: "center" });
+      doc.text(`${inv.invoiceType.toUpperCase()} INVOICE`, pageWidth / 2, 30, { align: "center" });
   
       // Invoice details
       doc.setFontSize(12);
@@ -195,14 +242,16 @@ export default function InvoicesPage() {
   
       const colX = {
         index: 10,
-        description: 25,
-        quantity: 120,
+        itemName: 20,
+        description: 50,
+        quantity: 115,
         unitPrice: 140,
         vat: 160,
         amount: 180,
       };
   
       doc.text("No.", colX.index, y);
+      doc.text("Item Name", colX.itemName, y);
       doc.text("Description", colX.description, y);
       doc.text("Qty", colX.quantity, y, { align: "center" });
       doc.text("Price", colX.unitPrice, y, { align: "center" });
@@ -224,6 +273,7 @@ export default function InvoicesPage() {
           // Repeat table header on new page
           doc.setFont("courier", "bold");
           doc.text("No.", colX.index, y);
+          doc.text("Item Name", colX.itemName, y);
           doc.text("Description", colX.description, y);
           doc.text("Qty", colX.quantity, y, { align: "center" });
           doc.text("Price", colX.unitPrice, y, { align: "center" });
@@ -234,11 +284,12 @@ export default function InvoicesPage() {
         }
   
         doc.text(`${index + 1}`, colX.index, y);
+        doc.text(item.itemName, colX.itemName, y);
         doc.text(item.description, colX.description, y);
         doc.text(item.quantity.toString(), colX.quantity, y, { align: "center" });
-        doc.text(`$${item.unitPrice.toFixed(2)}`, colX.unitPrice, y, { align: "center" });
+        doc.text(`${item.unitPrice.toFixed(2)} SAR`, colX.unitPrice, y, { align: "center" });
         doc.text(`${item.vatPercentage}%`, colX.vat, y, { align: "center" });
-        doc.text(`$${item.amount.toFixed(2)}`, colX.amount, y, { align: "center" });
+        doc.text(`${item.amount.toFixed(2)} SAR`, colX.amount, y, { align: "center" });
   
         y += 7;
       });
@@ -256,23 +307,23 @@ export default function InvoicesPage() {
   
       doc.setFont("courier", "bold");
       doc.text("Total Amount:", 140, y);
-      doc.text(`$${inv.totalAmount.toFixed(2)}`, 200, y, { align: "right" });
+      doc.text(`${inv.totalAmount.toFixed(2)} SAR`, 200, y, { align: "right" });
   
       // Save
-      doc.save(`Invoice_${inv.id}.pdf`);
+      doc.save(`${inv.invoiceType}_Invoice_${inv.id}.pdf`);
       showToast("PDF downloaded successfully!", "success");
     } catch (error) {
       console.error("Error generating PDF:", error);
       showToast("Failed to generate PDF. Please try again.", "error");
     }
   };
-  
-  
 
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split('T')[0],
-      items: [{ description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+      invoiceType: "Simple" as "Simple" | "Proforma",
+      items: [{ itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+      currency: "USD",
     })
     setEditingInvoice(null)
   }
@@ -284,8 +335,7 @@ export default function InvoicesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 px-4 sm:px-6 lg:px-0">
-        {/* Header and Add Button */}
+      <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Invoices</h1>
@@ -293,21 +343,20 @@ export default function InvoicesPage() {
           </div>
           <button
             onClick={openAddDialog}
-            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base"
+            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Invoice
           </button>
         </div>
 
-        {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by invoice ID..."
+                placeholder="Search by invoice ID, type, item name"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -315,22 +364,28 @@ export default function InvoicesPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[640px] hidden md:table">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Invoice ID
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Amount
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Currency
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Items
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -338,32 +393,38 @@ export default function InvoicesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No invoices found
                     </td>
                   </tr>
                 ) : (
                   filteredInvoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {inv.id}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {inv.invoiceType}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {inv.date}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${inv.totalAmount.toFixed(2)}
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {getCurrencySymbol(inv.currency)}{inv.totalAmount.toFixed(2)}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {inv.currency}
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base">
                         <ul className="list-disc list-inside">
                           {inv.items.map((item, index) => (
                             <li key={index}>
-                              {item.description} (Qty: {item.quantity} {item.unit}, ${item.unitPrice.toFixed(2)}/unit, VAT: {item.vatPercentage}%, Total: ${item.amount.toFixed(2)})
+                              {item.itemName} - {item.description} (Qty: {item.quantity} {item.unit}, {getCurrencySymbol(inv.currency)}{item.unitPrice.toFixed(2)}/unit, VAT: {item.vatPercentage}%, Total: {getCurrencySymbol(inv.currency)}{item.amount.toFixed(2)})
                             </li>
                           ))}
                         </ul>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleEdit(inv)}
@@ -390,17 +451,93 @@ export default function InvoicesPage() {
                 )}
               </tbody>
             </table>
+            <div className="md:hidden divide-y divide-gray-200">
+              {filteredInvoices.length === 0 ? (
+                <div className="p-6 text-center text-gray-500 text-sm">
+                  No invoices found
+                </div>
+              ) : (
+                filteredInvoices.map((inv) => (
+                  <div key={inv.id} className="p-4 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{inv.id}</p>
+                        <p className="text-gray-500 text-sm">Type: {inv.invoiceType}</p>
+                        <p className="text-gray-500 text-sm">Date: {inv.date}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{inv.totalAmount.toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Currency: {inv.currency}</p>
+                        <ul className="list-disc list-inside text-gray-500 text-sm">
+                          {inv.items.map((item, index) => (
+                            <li key={index}>
+                              {item.itemName} - {item.description} (Qty: {item.quantity} {item.unit}, {getCurrencySymbol(inv.currency)}{item.unitPrice.toFixed(2)}/unit, VAT: {item.vatPercentage}%, Total: {getCurrencySymbol(inv.currency)}{item.amount.toFixed(2)})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEdit(inv)}
+                          className="p-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(inv.id)}
+                          className="p-1 text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDownloadPDF(inv)}
+                          className="p-1 text-green-600 hover:text-green-800"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Modal */}
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
-            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingInvoice ? "Edit Invoice" : "Add New Invoice"}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="invoiceType" className="block text-sm font-medium text-gray-700 mb-1">
+                    Invoice Type
+                  </label>
+                  <select
+                    id="invoiceType"
+                    value={formData.invoiceType}
+                    onChange={(e) => setFormData({ ...formData, invoiceType: e.target.value as "Simple" | "Proforma" })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="Simple">Simple</option>
+                    <option value="Proforma">Proforma</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="USD">Dollar (USD)</option>
+                    <option value="PKR">Pakistani Rupee (PKR)</option>
+                    <option value="SAR">Saudi Riyal (SAR)</option>
+                  </select>
+                </div>
                 <div>
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
@@ -410,7 +547,7 @@ export default function InvoicesPage() {
                     type="date"
                     value={formData.date}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div>
@@ -418,6 +555,24 @@ export default function InvoicesPage() {
                   {formData.items.map((item, index) => (
                     <div key={index} className="border p-4 mb-2 rounded-md relative">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label htmlFor={`itemName-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
+                            Item Name
+                          </label>
+                          <select
+                            id={`itemName-${index}`}
+                            value={item.itemName}
+                            onChange={(e) => handleItemChange(index, "itemName", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-500"
+                          >
+                            <option value="" disabled>Select</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.name}>
+                                {product.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div>
                           <label htmlFor={`description-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
                             Description
@@ -427,8 +582,8 @@ export default function InvoicesPage() {
                             type="text"
                             value={item.description}
                             onChange={(e) => handleItemChange(index, "description", e.target.value)}
-                            placeholder="Enter description"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            placeholder="Description"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                         <div>
@@ -441,8 +596,8 @@ export default function InvoicesPage() {
                             step="1"
                             value={item.quantity}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
-                            placeholder="Enter quantity"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            placeholder="Quantity"
+                            className="sm:max-w-[100%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                           />
                         </div>
                         <div>
@@ -453,8 +608,9 @@ export default function InvoicesPage() {
                             id={`unit-${index}`}
                             value={item.unit}
                             onChange={(e) => handleItemChange(index, "unit", e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            className="w-full px-3 py-2 border border-gray-300 text-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           >
+                            <option value="" disabled>Unit</option>
                             <option value="meter">Meter</option>
                             <option value="yard">Yard</option>
                           </select>
@@ -469,8 +625,8 @@ export default function InvoicesPage() {
                             step="0.01"
                             value={item.unitPrice}
                             onChange={(e) => handleItemChange(index, "unitPrice", e.target.value)}
-                            placeholder="Enter unit price"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            placeholder="Unit Price"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                         <div>
@@ -483,17 +639,17 @@ export default function InvoicesPage() {
                             step="0.1"
                             value={item.vatPercentage}
                             onChange={(e) => handleItemChange(index, "vatPercentage", e.target.value)}
-                            placeholder="Enter VAT %"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            placeholder="VAT %"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
                           <input
                             type="text"
-                            value={item.amount}
+                            value={`${getCurrencySymbol(formData.currency)}${item.amount}`}
                             readOnly
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                           />
                         </div>
                       </div>
@@ -521,22 +677,22 @@ export default function InvoicesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
                   <input
                     type="text"
-                    value={calculateTotalAmount()}
+                    value={`${getCurrencySymbol(formData.currency)}${calculateTotalAmount()}`}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
                   <button
                     type="button"
                     onClick={() => setIsDialogOpen(false)}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm sm:text-base"
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm sm:text-base"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                   >
                     {editingInvoice ? "Update" : "Add"} Invoice
                   </button>

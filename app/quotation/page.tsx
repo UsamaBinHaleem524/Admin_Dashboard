@@ -8,7 +8,14 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import jsPDF from "jspdf"
 
+interface Product {
+  id: string
+  name: string
+  date: string
+}
+
 interface QuotationItem {
+  itemName: string
   description: string
   amount: number
 }
@@ -18,22 +25,26 @@ interface Quotation {
   date: string
   items: QuotationItem[]
   totalAmount: number
+  currency: "USD" | "PKR" | "SAR"
 }
 
 export default function QuotationsPage() {
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [filteredQuotations, setFilteredQuotations] = useState<Quotation[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null)
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    items: [{ description: "", amount: "" }],
+    items: [{ itemName: "", description: "", amount: "" }],
+    currency: "USD" as "USD" | "PKR" | "SAR",
   })
   const { showToast } = useToast()
 
   useEffect(() => {
     loadQuotations()
+    loadProducts()
   }, [])
 
   useEffect(() => {
@@ -45,6 +56,14 @@ export default function QuotationsPage() {
     if (savedQuotations) {
       const parsedQuotations = JSON.parse(savedQuotations)
       setQuotations(parsedQuotations)
+    }
+  }
+
+  const loadProducts = () => {
+    const savedProducts = localStorage.getItem("products")
+    if (savedProducts) {
+      const parsedProducts = JSON.parse(savedProducts)
+      setProducts(parsedProducts)
     }
   }
 
@@ -60,7 +79,11 @@ export default function QuotationsPage() {
       const filtered = quotations.filter(
         (q) =>
           q.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          q.items.some(item => item.description.toLowerCase().includes(searchTerm.toLowerCase()))
+          q.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          q.items.some(item => 
+            item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.description.toLowerCase().includes(searchTerm.toLowerCase())
+          )
       )
       setFilteredQuotations(filtered)
     }
@@ -69,7 +92,7 @@ export default function QuotationsPage() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { description: "", amount: "" }],
+      items: [...formData.items, { itemName: "", description: "", amount: "" }],
     })
   }
 
@@ -90,11 +113,25 @@ export default function QuotationsPage() {
       .toFixed(2)
   }
 
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+    switch (currency) {
+      case "USD": return "$"
+      case "PKR": return "₨"
+      case "SAR": return "ر.س"
+      default: return ""
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (formData.items.some(item => !item.description || !item.amount)) {
+    if (formData.items.some(item => !item.itemName || !item.description || !item.amount)) {
       showToast("Please fill in all required fields for all items", "error")
+      return
+    }
+
+    if (!formData.currency) {
+      showToast("Please select a currency", "error")
       return
     }
 
@@ -105,10 +142,12 @@ export default function QuotationsPage() {
       id: qId,
       date: formData.date,
       items: formData.items.map(item => ({
+        itemName: item.itemName,
         description: item.description,
         amount: Number.parseFloat(item.amount),
       })),
       totalAmount,
+      currency: formData.currency,
     }
 
     let newQuotations: Quotation[]
@@ -132,9 +171,11 @@ export default function QuotationsPage() {
     setFormData({
       date: quotation.date,
       items: quotation.items.map(item => ({
+        itemName: item.itemName,
         description: item.description,
         amount: item.amount.toString(),
       })),
+      currency: quotation.currency,
     })
     setIsDialogOpen(true)
   }
@@ -146,88 +187,88 @@ export default function QuotationsPage() {
       showToast("Quotation deleted successfully!", "success")
     }
   }
-
   const handleDownloadPDF = (q: Quotation) => {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
-
+  
       // Logo (top-left corner)
-      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="; // Replace with real base64 image
+      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
       doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
-
+  
       // Header - QUOTATION title
       doc.setFontSize(20);
       doc.setFont("helvetica", "bold");
       doc.text("QUOTATION", pageWidth / 2, 30, { align: "center" });
-
+  
       // Quotation details
-      doc.setFontSize(10); // Smaller size
+      doc.setFontSize(12);
       doc.setFont("helvetica", "normal");
       doc.text(`Quotation ID: ${q.id}`, 10, 40);
       doc.text(`Date: ${q.date}`, 10, 47);
-
+      doc.text(`Currency: ${q.currency}`, 10, 54);
+  
       // Table headers
-      let y = 60;
+      let y = 65;
       doc.setFontSize(12);
       doc.setFont("courier", "bold");
-
+  
       const colX = {
         index: 10,
         itemName: 25,
         description: 70,
-        amount: 180,
+        amount: 160, // Increased from 150 to 160 for more space
       };
-
+  
       doc.text("No.", colX.index, y);
       doc.text("Item Name", colX.itemName, y);
       doc.text("Description", colX.description, y);
-      doc.text("Amount", colX.amount, y, { align: "center" });
-
+      doc.text("Amount", colX.amount, y, { align: "right" });
+  
       y += 6;
       doc.setLineWidth(0.2);
       doc.line(10, y, 200, y); // underline header
       y += 4;
-
+  
       // Table rows
       doc.setFont("courier", "normal");
       q.items.forEach((item, index) => {
         if (y > 270) {
           doc.addPage();
           y = 20;
-
+  
           // Repeat table header
           doc.setFont("courier", "bold");
           doc.text("No.", colX.index, y);
           doc.text("Item Name", colX.itemName, y);
           doc.text("Description", colX.description, y);
-          doc.text("Amount", colX.amount, y, { align: "center" });
+          doc.text("Amount", colX.amount, y, { align: "right" });
           y += 10;
           doc.setFont("courier", "normal");
         }
-
+  
         doc.text(`${index + 1}`, colX.index, y);
-        doc.text("Item " + (index + 1), colX.itemName, y); // Placeholder Item Name
-        doc.text(item.description, colX.description, y);
-        doc.text(`$${item.amount.toFixed(2)}`, colX.amount, y, { align: "center" });
+        doc.text(item.itemName, colX.itemName, y, { maxWidth: 45 });
+        doc.text(item.description, colX.description, y, { maxWidth: 80 });
+        doc.text(`${getCurrencySymbol(q.currency)}${item.amount.toFixed(2)}`, colX.amount, y, { align: "right" });
         y += 7;
       });
-
+  
       // Total Amount
       if (y > 270) {
         doc.addPage();
         y = 20;
       }
-
+  
       y += 3;
       doc.setLineWidth(0.2);
       doc.line(10, y, 200, y); // underline before total
       y += 10;
-
+  
       doc.setFont("courier", "bold");
-      doc.text("Total Amount:", 140, y);
-      doc.text(`$${q.totalAmount.toFixed(2)}`, 200, y, { align: "right" });
-
+      doc.text("Total Amount:", 110, y); // Moved left to create more space before amount
+      doc.text(`${getCurrencySymbol(q.currency)}${q.totalAmount.toFixed(2)}`, colX.amount, y, { align: "right", maxWidth: 100 }); // Increased space and added maxWidth
+  
       // Save
       doc.save(`Quotation_${q.id}.pdf`);
       showToast("PDF downloaded successfully!", "success");
@@ -240,7 +281,8 @@ export default function QuotationsPage() {
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split('T')[0],
-      items: [{ description: "", amount: "" }],
+      items: [{ itemName: "", description: "", amount: "" }],
+      currency: "USD",
     })
     setEditingQuotation(null)
   }
@@ -252,8 +294,7 @@ export default function QuotationsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 px-4 sm:px-6 lg:px-0">
-        {/* Header and Add Button */}
+      <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Quotations</h1>
@@ -261,44 +302,46 @@ export default function QuotationsPage() {
           </div>
           <button
             onClick={openAddDialog}
-            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base"
+            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Quotation
           </button>
         </div>
 
-        {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by quotation ID or description..."
+                placeholder="Search by quotation ID, item name, description, or currency..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
               />
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[640px] hidden md:table">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Quotation ID
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Amount
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Currency
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Items
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -306,32 +349,35 @@ export default function QuotationsPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredQuotations.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No quotations found
                     </td>
                   </tr>
                 ) : (
                   filteredQuotations.map((q) => (
                     <tr key={q.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {q.id}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {q.date}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${q.totalAmount.toFixed(2)}
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {getCurrencySymbol(q.currency)}{q.totalAmount.toFixed(2)}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {q.currency}
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base">
                         <ul className="list-disc list-inside">
                           {q.items.map((item, index) => (
                             <li key={index}>
-                              {item.description} (Amount: ${item.amount.toFixed(2)})
+                              {item.itemName} - {item.description} (Amount: {getCurrencySymbol(q.currency)}{item.amount.toFixed(2)})
                             </li>
                           ))}
                         </ul>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleEdit(q)}
@@ -358,17 +404,78 @@ export default function QuotationsPage() {
                 )}
               </tbody>
             </table>
+            <div className="md:hidden divide-y divide-gray-200">
+              {filteredQuotations.length === 0 ? (
+                <div className="p-6 text-center text-gray-500 text-sm">
+                  No quotations found
+                </div>
+              ) : (
+                filteredQuotations.map((q) => (
+                  <div key={q.id} className="p-4 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{q.id}</p>
+                        <p className="text-gray-500 text-sm">Date: {q.date}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(q.currency)}{q.totalAmount.toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Currency: {q.currency}</p>
+                        <ul className="list-disc list-inside text-gray-500 text-sm">
+                          {q.items.map((item, index) => (
+                            <li key={index}>
+                              {item.itemName} - {item.description} (Amount: {getCurrencySymbol(q.currency)}{item.amount.toFixed(2)})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEdit(q)}
+                          className="p-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(q.id)}
+                          className="p-1 text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDownloadPDF(q)}
+                          className="p-1 text-green-600 hover:text-green-800"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Modal */}
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
-            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-xl max-h-[80vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingQuotation ? "Edit Quotation" : "Add New Quotation"}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="USD">Dollar (USD)</option>
+                    <option value="PKR">Pakistani Rupee (PKR)</option>
+                    <option value="SAR">Saudi Riyal (SAR)</option>
+                  </select>
+                </div>
                 <div>
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
@@ -378,7 +485,7 @@ export default function QuotationsPage() {
                     type="date"
                     value={formData.date}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div>
@@ -386,6 +493,24 @@ export default function QuotationsPage() {
                   {formData.items.map((item, index) => (
                     <div key={index} className="border p-4 mb-2 rounded-md relative">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor={`itemName-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
+                            Item Name
+                          </label>
+                          <select
+                            id={`itemName-${index}`}
+                            value={item.itemName}
+                            onChange={(e) => handleItemChange(index, "itemName", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          >
+                            <option value="" disabled>Select</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.name}>
+                                {product.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div>
                           <label htmlFor={`description-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
                             Description
@@ -396,7 +521,7 @@ export default function QuotationsPage() {
                             value={item.description}
                             onChange={(e) => handleItemChange(index, "description", e.target.value)}
                             placeholder="Enter description"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                         <div>
@@ -410,7 +535,7 @@ export default function QuotationsPage() {
                             value={item.amount}
                             onChange={(e) => handleItemChange(index, "amount", e.target.value)}
                             placeholder="Enter amount"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                       </div>
@@ -438,22 +563,22 @@ export default function QuotationsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
                   <input
                     type="text"
-                    value={calculateTotalAmount()}
+                    value={`${getCurrencySymbol(formData.currency)}${calculateTotalAmount()}`}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
                   <button
                     type="button"
                     onClick={() => setIsDialogOpen(false)}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm sm:text-base"
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm sm:text-base"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                   >
                     {editingQuotation ? "Update" : "Add"} Quotation
                   </button>

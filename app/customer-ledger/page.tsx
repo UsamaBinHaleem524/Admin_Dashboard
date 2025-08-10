@@ -16,6 +16,7 @@ interface CustomerTransaction {
   totalAmount: number
   givenAmount: number
   remainingAmount: number
+  currency: "USD" | "PKR" | "SAR"
 }
 
 export default function CustomerLedgerPage() {
@@ -31,6 +32,7 @@ export default function CustomerLedgerPage() {
     totalAmount: "",
     givenAmount: "",
     remainingAmount: "",
+    currency: "USD" as "USD" | "PKR" | "SAR",
   })
   const { showToast } = useToast()
 
@@ -63,7 +65,8 @@ export default function CustomerLedgerPage() {
         (transaction) =>
           transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
           transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          transaction.date.includes(searchTerm)
+          transaction.date.includes(searchTerm) ||
+          transaction.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
       setFilteredTransactions(filtered)
     }
@@ -72,7 +75,7 @@ export default function CustomerLedgerPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.customer || !formData.description || !formData.totalAmount || !formData.givenAmount) {
+    if (!formData.customer || !formData.description || !formData.totalAmount || !formData.givenAmount || !formData.currency) {
       showToast("Please fill in all required fields", "error")
       return
     }
@@ -86,10 +89,11 @@ export default function CustomerLedgerPage() {
       customer: formData.customer,
       unit: formData.unit,
       description: formData.description,
-      date: new Date().toISOString().split('T')[0], // Current date
+      date: new Date().toISOString().split('T')[0],
       totalAmount,
       givenAmount,
       remainingAmount,
+      currency: formData.currency,
     }
 
     let newTransactions: CustomerTransaction[]
@@ -117,6 +121,7 @@ export default function CustomerLedgerPage() {
       totalAmount: transaction.totalAmount.toString(),
       givenAmount: transaction.givenAmount.toString(),
       remainingAmount: transaction.remainingAmount.toString(),
+      currency: transaction.currency,
     })
     setIsDialogOpen(true)
   }
@@ -137,6 +142,7 @@ export default function CustomerLedgerPage() {
       totalAmount: "",
       givenAmount: "",
       remainingAmount: "",
+      currency: "USD",
     })
     setEditingTransaction(null)
   }
@@ -152,10 +158,18 @@ export default function CustomerLedgerPage() {
     return (total - given).toFixed(2)
   }
 
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+    switch (currency) {
+      case "USD": return "$"
+      case "PKR": return "₨"
+      case "SAR": return "ر.س"
+      default: return ""
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6 px-4 sm:px-6 lg:px-0">
-        {/* Header and Add Button */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Customer Ledger</h1>
@@ -170,14 +184,13 @@ export default function CustomerLedgerPage() {
           </button>
         </div>
 
-        {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by customer, description, or date..."
+                placeholder="Search by customer, description, date, or currency..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -210,6 +223,9 @@ export default function CustomerLedgerPage() {
                     Remaining Amount
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Currency
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -217,7 +233,7 @@ export default function CustomerLedgerPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={9} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No transactions found
                     </td>
                   </tr>
@@ -237,10 +253,10 @@ export default function CustomerLedgerPage() {
                         {transaction.date}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${transaction.totalAmount.toFixed(2)}
+                        {getCurrencySymbol(transaction.currency)}{transaction.totalAmount.toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${transaction.givenAmount.toFixed(2)}
+                        {getCurrencySymbol(transaction.currency)}{transaction.givenAmount.toFixed(2)}
                       </td>
                       <td
                         className={cn(
@@ -248,7 +264,10 @@ export default function CustomerLedgerPage() {
                           transaction.remainingAmount < 0 ? "text-red-800" : "text-green-800"
                         )}
                       >
-                        ${transaction.remainingAmount.toFixed(2)}
+                        {getCurrencySymbol(transaction.currency)}{transaction.remainingAmount.toFixed(2)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {transaction.currency}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
@@ -274,7 +293,6 @@ export default function CustomerLedgerPage() {
           </div>
         </div>
 
-        {/* Modal */}
         {isDialogOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-md">
@@ -323,6 +341,21 @@ export default function CustomerLedgerPage() {
                   />
                 </div>
                 <div>
+                  <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  >
+                    <option value="USD">Dollar (USD)</option>
+                    <option value="PKR">Pakistani Rupee (PKR)</option>
+                    <option value="SAR">Saudi Riyal (SAR)</option>
+                  </select>
+                </div>
+                <div>
                   <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-1">
                     Total Amount
                   </label>
@@ -357,7 +390,7 @@ export default function CustomerLedgerPage() {
                   <input
                     id="remainingAmount"
                     type="text"
-                    value={calculateRemainingAmount()}
+                    value={`${getCurrencySymbol(formData.currency)}${calculateRemainingAmount()}`}
                     readOnly
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
                   />

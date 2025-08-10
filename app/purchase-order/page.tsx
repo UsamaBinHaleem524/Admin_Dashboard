@@ -2,11 +2,17 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { DashboardLayout } from "@/components/layout/dashboard-layout" // Ensure this path and export are correct
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
-import jsPDF from "jspdf" // Assuming jspdf is imported
+import jsPDF from "jspdf"
+
+interface Product {
+  id: string
+  name: string
+  date: string
+}
 
 interface PurchaseOrderItem {
   itemName: string
@@ -21,11 +27,13 @@ interface PurchaseOrder {
   date: string
   items: PurchaseOrderItem[]
   totalAmount: number
+  currency: "USD" | "PKR" | "SAR"
 }
 
 export default function PurchaseOrdersPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [filteredPurchaseOrders, setFilteredPurchaseOrders] = useState<PurchaseOrder[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null)
@@ -33,11 +41,14 @@ export default function PurchaseOrdersPage() {
     supplier: "",
     date: new Date().toISOString().split('T')[0],
     items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
+    currency: "USD" as "USD" | "PKR" | "SAR",
   })
+  console.log(">>>>>formdAta", formData);
   const { showToast } = useToast()
 
   useEffect(() => {
     loadPurchaseOrders()
+    loadProducts()
   }, [])
 
   useEffect(() => {
@@ -49,6 +60,14 @@ export default function PurchaseOrdersPage() {
     if (savedPurchaseOrders) {
       const parsedPurchaseOrders = JSON.parse(savedPurchaseOrders)
       setPurchaseOrders(parsedPurchaseOrders)
+    }
+  }
+
+  const loadProducts = () => {
+    const savedProducts = localStorage.getItem("products")
+    if (savedProducts) {
+      const parsedProducts = JSON.parse(savedProducts)
+      setProducts(parsedProducts)
     }
   }
 
@@ -64,7 +83,8 @@ export default function PurchaseOrdersPage() {
       const filtered = purchaseOrders.filter(
         (po) =>
           po.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          po.supplier.toLowerCase().includes(searchTerm.toLowerCase())
+          po.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          po.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
       setFilteredPurchaseOrders(filtered)
     }
@@ -101,10 +121,19 @@ export default function PurchaseOrdersPage() {
       .toFixed(2)
   }
 
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+    switch (currency) {
+      case "USD": return "$"
+      case "PKR": return "₨"
+      case "SAR": return "ر.س"
+      default: return ""
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.supplier || formData.items.some(item => !item.itemName || !item.quantity || !item.unitPrice)) {
+    if (!formData.supplier || !formData.currency || formData.items.some(item => !item.itemName || !item.quantity || !item.unitPrice)) {
       showToast("Please fill in all required fields for all items", "error")
       return
     }
@@ -123,6 +152,7 @@ export default function PurchaseOrdersPage() {
         amount: Number.parseFloat(item.amount),
       })),
       totalAmount,
+      currency: formData.currency,
     }
 
     let newPurchaseOrders: PurchaseOrder[]
@@ -152,6 +182,7 @@ export default function PurchaseOrdersPage() {
         unitPrice: item.unitPrice.toString(),
         amount: item.amount.toString(),
       })),
+      currency: purchaseOrder.currency,
     })
     setIsDialogOpen(true)
   }
@@ -169,23 +200,23 @@ export default function PurchaseOrdersPage() {
       const doc = new jsPDF();
       const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
       const pageWidth = doc.internal.pageSize.getWidth();
-  
+
       // Add logo
       doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
-  
+
       // Header
       doc.setFontSize(20);
       doc.setFont("helvetica", "bold");
       doc.text("PURCHASE ORDER", pageWidth / 2, 30, { align: 'center' });
-  
+
       doc.setFontSize(14);
       doc.setFont("helvetica", "normal");
       doc.text("Mehran Al Dahabi", pageWidth / 2, 40, { align: 'center' });
-  
+
       doc.setFontSize(10);
       doc.text("CR#: 591644739", 10, 50);
       doc.text("businessemail@gmail.com", 10, 55);
-  
+
       // Vendor Details
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
@@ -193,12 +224,12 @@ export default function PurchaseOrdersPage() {
       doc.setFont("helvetica", "normal");
       doc.text("Faisal Ahmed", 10, 78);
       doc.text("Jeddah, Saudi Arabia", 10, 85);
-  
+
       // PO Details
       const rightX = pageWidth - 10;
       doc.text(`PO Number: ${po.id}`, rightX, 70, { align: 'right' });
       doc.text(`Date: ${po.date}`, rightX, 78, { align: 'right' });
-  
+
       // Table Headers
       let y = 100;
       const colX = {
@@ -207,19 +238,19 @@ export default function PurchaseOrdersPage() {
         unitPrice: 130,
         amount: 160,
       };
-  
+
       doc.setFontSize(12);
       doc.setFont("courier", "bold");
       doc.text("Item Name", colX.itemName, y);
       doc.text("Qty", colX.quantity, y, { align: "center" });
       doc.text("Unit Price", colX.unitPrice, y, { align: "center" });
       doc.text("Amount", colX.amount, y, { align: "center" });
-  
+
       y += 6;
       doc.setLineWidth(0.2);
       doc.line(10, y, 200, y); // table header underline
       y += 4;
-  
+
       // Table Rows
       doc.setFont("courier", "normal");
       po.items.forEach((item, index) => {
@@ -227,22 +258,22 @@ export default function PurchaseOrdersPage() {
           doc.addPage();
           y = 20;
         }
-  
+
         doc.text(item.itemName, colX.itemName, y);
         doc.text(item.quantity.toString(), colX.quantity, y, { align: "center" });
-        doc.text(`$${item.unitPrice.toFixed(2)}`, colX.unitPrice, y, { align: "center" });
-        doc.text(`$${item.amount.toFixed(2)}`, colX.amount, y, { align: "center" });
+        doc.text(`${getCurrencySymbol(po.currency)}${item.unitPrice.toFixed(2)}`, colX.unitPrice, y, { align: "center" });
+        doc.text(`${getCurrencySymbol(po.currency)}${item.amount.toFixed(2)}`, colX.amount, y, { align: "center" });
         y += 7;
       });
-  
+
       // Total
       y += 3;
       doc.setFont("courier", "bold");
       doc.line(10, y, 200, y); // underline before total
       y += 10;
       doc.text("Total", colX.unitPrice, y, { align: "center" });
-      doc.text(`$${po.totalAmount.toFixed(2)}`, colX.amount, y, { align: "center" });
-  
+      doc.text(`${getCurrencySymbol(po.currency)}${po.totalAmount.toFixed(2)}`, colX.amount, y, { align: "center" });
+
       doc.save(`Purchase_Order_${po.id}.pdf`);
       showToast("PDF downloaded successfully!", "success");
     } catch (error) {
@@ -250,13 +281,13 @@ export default function PurchaseOrdersPage() {
       showToast("Failed to generate PDF. Please try again.", "error");
     }
   };
-  
 
   const resetForm = () => {
     setFormData({
       supplier: "",
       date: new Date().toISOString().split('T')[0],
       items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
+      currency: "USD",
     })
     setEditingPurchaseOrder(null)
   }
@@ -268,8 +299,7 @@ export default function PurchaseOrdersPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 px-4 sm:px-6 lg:px-0">
-        {/* Header and Add Button */}
+      <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Purchase Orders</h1>
@@ -277,21 +307,20 @@ export default function PurchaseOrdersPage() {
           </div>
           <button
             onClick={openAddDialog}
-            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base"
+            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Purchase Order
           </button>
         </div>
 
-        {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <div className="flex items-center space-x-2">
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by purchase order ID or supplier..."
+                placeholder="Search by purchase order ID, supplier, or currency..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -299,25 +328,28 @@ export default function PurchaseOrdersPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[640px] hidden md:table">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     PO ID
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplier
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Amount
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Currency
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Items
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -325,35 +357,38 @@ export default function PurchaseOrdersPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredPurchaseOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No purchase orders found
                     </td>
                   </tr>
                 ) : (
                   filteredPurchaseOrders.map((po) => (
                     <tr key={po.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {po.id}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.supplier}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.date}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${po.totalAmount.toFixed(2)}
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {getCurrencySymbol(po.currency)}{po.totalAmount.toFixed(2)}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {po.currency}
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base">
                         <ul className="list-disc list-inside">
                           {po.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} (Qty: {item.quantity}, ${item.unitPrice.toFixed(2)}/unit, Total: ${item.amount.toFixed(2)})
+                              {item.itemName} (Qty: {item.quantity}, {getCurrencySymbol(po.currency)}{item.unitPrice.toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{item.amount.toFixed(2)})
                             </li>
                           ))}
                         </ul>
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleEdit(po)}
@@ -380,13 +415,60 @@ export default function PurchaseOrdersPage() {
                 )}
               </tbody>
             </table>
+            <div className="md:hidden divide-y divide-gray-200">
+              {filteredPurchaseOrders.length === 0 ? (
+                <div className="p-6 text-center text-gray-500 text-sm">
+                  No purchase orders found
+                </div>
+              ) : (
+                filteredPurchaseOrders.map((po) => (
+                  <div key={po.id} className="p-4 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{po.id}</p>
+                        <p className="text-gray-500 text-sm">Supplier: {po.supplier}</p>
+                        <p className="text-gray-500 text-sm">Date: {po.date}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{po.totalAmount.toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Currency: {po.currency}</p>
+                        <ul className="list-disc list-inside text-gray-500 text-sm">
+                          {po.items.map((item, index) => (
+                            <li key={index}>
+                              {item.itemName} (Qty: {item.quantity}, {getCurrencySymbol(po.currency)}{item.unitPrice.toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{item.amount.toFixed(2)})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEdit(po)}
+                          className="p-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(po.id)}
+                          className="p-1 text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDownloadPDF(po)}
+                          className="p-1 text-green-600 hover:text-green-800"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Modal */}
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
-            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-xl max-h-[80vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingPurchaseOrder ? "Edit Purchase Order" : "Add New Purchase Order"}
               </h3>
@@ -400,9 +482,24 @@ export default function PurchaseOrdersPage() {
                     type="text"
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    placeholder="Enter supplier name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    placeholder="Supplier Name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
+                </div>
+                <div>
+                  <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="USD">Dollar (USD)</option>
+                    <option value="PKR">Pakistani Rupee (PKR)</option>
+                    <option value="SAR">Saudi Riyal (SAR)</option>
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
@@ -413,7 +510,7 @@ export default function PurchaseOrdersPage() {
                     type="date"
                     value={formData.date}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div>
@@ -425,14 +522,19 @@ export default function PurchaseOrdersPage() {
                           <label htmlFor={`itemName-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
                             Item Name
                           </label>
-                          <input
+                          <select
                             id={`itemName-${index}`}
-                            type="text"
                             value={item.itemName}
                             onChange={(e) => handleItemChange(index, "itemName", e.target.value)}
-                            placeholder="Enter item name"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                          />
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          >
+                            <option value="" disabled>Select</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.name}>
+                                {product.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label htmlFor={`quantity-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
@@ -444,8 +546,8 @@ export default function PurchaseOrdersPage() {
                             step="1"
                             value={item.quantity}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
-                            placeholder="Enter quantity"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            placeholder="Quantity"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                         <div>
@@ -458,8 +560,8 @@ export default function PurchaseOrdersPage() {
                             step="0.01"
                             value={item.unitPrice}
                             onChange={(e) => handleItemChange(index, "unitPrice", e.target.value)}
-                            placeholder="Enter unit price"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                            placeholder="Unit Price"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           />
                         </div>
                       </div>
@@ -467,9 +569,9 @@ export default function PurchaseOrdersPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
                         <input
                           type="text"
-                          value={item.amount}
+                          value={`${getCurrencySymbol(formData.currency)}${item.amount}`}
                           readOnly
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                         />
                       </div>
                       {formData.items.length > 1 && (
@@ -496,22 +598,22 @@ export default function PurchaseOrdersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
                   <input
                     type="text"
-                    value={calculateTotalAmount()}
+                    value={`${getCurrencySymbol(formData.currency)}${calculateTotalAmount()}`}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
                   <button
                     type="button"
                     onClick={() => setIsDialogOpen(false)}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm sm:text-base"
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm sm:text-base"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                   >
                     {editingPurchaseOrder ? "Update" : "Add"} Purchase Order
                   </button>
