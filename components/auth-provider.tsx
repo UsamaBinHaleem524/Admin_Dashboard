@@ -21,7 +21,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToast()
 
   useEffect(() => {
-    const authStatus = localStorage.getItem("isAuthenticated")
+    // Check if user is authenticated from session storage
+    const authStatus = sessionStorage.getItem("isAuthenticated")
     if (authStatus === "true") {
       setIsAuthenticated(true)
     }
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Simple authentication - in real app, this would be API call
     if (username === "admin" && password === "admin123") {
       setIsAuthenticated(true)
-      localStorage.setItem("isAuthenticated", "true")
+      sessionStorage.setItem("isAuthenticated", "true")
       showToast("Login successful!", "success")
       router.push("/dashboard")
       return true
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setIsAuthenticated(false)
-    localStorage.removeItem("isAuthenticated")
+    sessionStorage.removeItem("isAuthenticated")
     showToast("Logged out successfully!", "success")
     router.push("/login")
   }

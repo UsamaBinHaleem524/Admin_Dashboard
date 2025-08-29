@@ -6,11 +6,20 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
+import { customerTransactionsAPI, productsAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
+
+interface Product {
+  id: string
+  name: string
+  date: string
+}
 
 interface CustomerTransaction {
   id: string
   customer: string
   unit: "yard" | "meter"
+  item: string
   description: string
   date: string
   totalAmount: number
@@ -22,12 +31,19 @@ interface CustomerTransaction {
 export default function CustomerLedgerPage() {
   const [transactions, setTransactions] = useState<CustomerTransaction[]>([])
   const [filteredTransactions, setFilteredTransactions] = useState<CustomerTransaction[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<CustomerTransaction | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; transaction: CustomerTransaction | null }>({
+    isOpen: false,
+    transaction: null,
+  })
   const [formData, setFormData] = useState({
     customer: "",
     unit: "yard" as "yard" | "meter",
+    item: "",
     description: "",
     totalAmount: "",
     givenAmount: "",
@@ -38,22 +54,37 @@ export default function CustomerLedgerPage() {
 
   useEffect(() => {
     loadTransactions()
+    loadProducts()
   }, [])
 
   useEffect(() => {
     filterTransactions()
   }, [transactions, searchTerm])
 
-  const loadTransactions = () => {
-    const savedTransactions = localStorage.getItem("customerTransactions")
-    if (savedTransactions) {
-      const parsedTransactions = JSON.parse(savedTransactions)
-      setTransactions(parsedTransactions)
+  const loadTransactions = async () => {
+    try {
+      setLoading(true)
+      const data = await customerTransactionsAPI.getAll()
+      setTransactions(data)
+    } catch (error) {
+      showToast("Failed to load transactions", "error")
+      console.error("Error loading transactions:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const saveTransactions = (newTransactions: CustomerTransaction[]) => {
-    localStorage.setItem("customerTransactions", JSON.stringify(newTransactions))
+  const loadProducts = async () => {
+    try {
+      const data = await productsAPI.getAll()
+      setProducts(data)
+    } catch (error) {
+      showToast("Failed to load products", "error")
+      console.error("Error loading products:", error)
+    }
+  }
+
+  const saveTransactions = async (newTransactions: CustomerTransaction[]) => {
     setTransactions(newTransactions)
   }
 
@@ -64,6 +95,7 @@ export default function CustomerLedgerPage() {
       const filtered = transactions.filter(
         (transaction) =>
           transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (transaction.item && transaction.item.toLowerCase().includes(searchTerm.toLowerCase())) ||
           transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
           transaction.date.includes(searchTerm) ||
           transaction.currency.toLowerCase().includes(searchTerm.toLowerCase())
@@ -72,7 +104,7 @@ export default function CustomerLedgerPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.customer || !formData.description || !formData.totalAmount || !formData.givenAmount || !formData.currency) {
@@ -88,6 +120,7 @@ export default function CustomerLedgerPage() {
       id: editingTransaction ? editingTransaction.id : Date.now().toString(),
       customer: formData.customer,
       unit: formData.unit,
+      item: formData.item,
       description: formData.description,
       date: new Date().toISOString().split('T')[0],
       totalAmount,
@@ -96,20 +129,22 @@ export default function CustomerLedgerPage() {
       currency: formData.currency,
     }
 
-    let newTransactions: CustomerTransaction[]
-    if (editingTransaction) {
-      newTransactions = transactions.map((transaction) =>
-        transaction.id === editingTransaction.id ? transactionData : transaction
-      )
-      showToast("Transaction updated successfully!", "success")
-    } else {
-      newTransactions = [...transactions, transactionData]
-      showToast("Transaction added successfully!", "success")
+    try {
+      if (editingTransaction) {
+        await customerTransactionsAPI.update(transactionData)
+        showToast("Transaction updated successfully!", "success")
+      } else {
+        await customerTransactionsAPI.create(transactionData)
+        showToast("Transaction added successfully!", "success")
+      }
+      
+      await loadTransactions()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save transaction", "error")
+      console.error("Error saving transaction:", error)
     }
-
-    saveTransactions(newTransactions)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (transaction: CustomerTransaction) => {
@@ -117,6 +152,7 @@ export default function CustomerLedgerPage() {
     setFormData({
       customer: transaction.customer,
       unit: transaction.unit,
+      item: transaction.item || "",
       description: transaction.description,
       totalAmount: transaction.totalAmount.toString(),
       givenAmount: transaction.givenAmount.toString(),
@@ -126,18 +162,30 @@ export default function CustomerLedgerPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this transaction?")) {
-      const newTransactions = transactions.filter((transaction) => transaction.id !== id)
-      saveTransactions(newTransactions)
+  const handleDelete = async (id: string) => {
+    try {
+      await customerTransactionsAPI.delete(id)
+      await loadTransactions()
       showToast("Transaction deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete transaction", "error")
+      console.error("Error deleting transaction:", error)
     }
+  }
+
+  const openDeleteModal = (transaction: CustomerTransaction) => {
+    setDeleteModal({ isOpen: true, transaction })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, transaction: null })
   }
 
   const resetForm = () => {
     setFormData({
       customer: "",
       unit: "yard",
+      item: "",
       description: "",
       totalAmount: "",
       givenAmount: "",
@@ -190,7 +238,7 @@ export default function CustomerLedgerPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by customer, description, date, or currency..."
+                placeholder="Search by customer, item, description, date, or currency..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -206,6 +254,9 @@ export default function CustomerLedgerPage() {
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Unit
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Item
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
@@ -233,7 +284,7 @@ export default function CustomerLedgerPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={10} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No transactions found
                     </td>
                   </tr>
@@ -245,6 +296,9 @@ export default function CustomerLedgerPage() {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {transaction.unit}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {transaction.item || "-"}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
                         {transaction.description}
@@ -278,7 +332,7 @@ export default function CustomerLedgerPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(transaction.id)}
+                            onClick={() => openDeleteModal(transaction)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -294,7 +348,7 @@ export default function CustomerLedgerPage() {
         </div>
 
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center !mt-0 z-50 px-4 sm:px-0">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-md">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingTransaction ? "Edit Transaction" : "Add New Transaction"}
@@ -325,6 +379,24 @@ export default function CustomerLedgerPage() {
                   >
                     <option value="yard">Yard</option>
                     <option value="meter">Meter</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
+                    Item
+                  </label>
+                  <select
+                    id="item"
+                    value={formData.item}
+                    onChange={(e) => setFormData({ ...formData, item: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  >
+                    <option value="">Select an item</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.name}>
+                        {product.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -414,6 +486,16 @@ export default function CustomerLedgerPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.transaction && handleDelete(deleteModal.transaction.id)}
+          title="Delete Transaction"
+          message="Are you sure you want to delete this transaction? This action cannot be undone."
+          itemName={`${deleteModal.transaction?.customer} - ${deleteModal.transaction?.description}`}
+        />
       </div>
     </DashboardLayout>
   )

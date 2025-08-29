@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
+import { quotationsAPI, productsAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 import jsPDF from "jspdf"
 
 interface Product {
@@ -35,6 +37,11 @@ export default function QuotationsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; quotation: Quotation | null }>({
+    isOpen: false,
+    quotation: null,
+  })
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     items: [{ itemName: "", description: "", amount: "" }],
@@ -51,24 +58,30 @@ export default function QuotationsPage() {
     filterQuotations()
   }, [quotations, searchTerm])
 
-  const loadQuotations = () => {
-    const savedQuotations = localStorage.getItem("quotations")
-    if (savedQuotations) {
-      const parsedQuotations = JSON.parse(savedQuotations)
-      setQuotations(parsedQuotations)
+  const loadQuotations = async () => {
+    try {
+      setLoading(true)
+      const data = await quotationsAPI.getAll()
+      setQuotations(data)
+    } catch (error) {
+      showToast("Failed to load quotations", "error")
+      console.error("Error loading quotations:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem("products")
-    if (savedProducts) {
-      const parsedProducts = JSON.parse(savedProducts)
-      setProducts(parsedProducts)
+  const loadProducts = async () => {
+    try {
+      const data = await productsAPI.getAll()
+      setProducts(data)
+    } catch (error) {
+      showToast("Failed to load products", "error")
+      console.error("Error loading products:", error)
     }
   }
 
-  const saveQuotations = (newQuotations: Quotation[]) => {
-    localStorage.setItem("quotations", JSON.stringify(newQuotations))
+  const saveQuotations = async (newQuotations: Quotation[]) => {
     setQuotations(newQuotations)
   }
 
@@ -122,7 +135,7 @@ export default function QuotationsPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (formData.items.some(item => !item.itemName || !item.description || !item.amount)) {
@@ -150,20 +163,22 @@ export default function QuotationsPage() {
       currency: formData.currency,
     }
 
-    let newQuotations: Quotation[]
-    if (editingQuotation) {
-      newQuotations = quotations.map((q) =>
-        q.id === editingQuotation.id ? quotationData : q
-      )
-      showToast("Quotation updated successfully!", "success")
-    } else {
-      newQuotations = [...quotations, quotationData]
-      showToast("Quotation added successfully!", "success")
+    try {
+      if (editingQuotation) {
+        await quotationsAPI.update(quotationData)
+        showToast("Quotation updated successfully!", "success")
+      } else {
+        await quotationsAPI.create(quotationData)
+        showToast("Quotation added successfully!", "success")
+      }
+      
+      await loadQuotations()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save quotation", "error")
+      console.error("Error saving quotation:", error)
     }
-
-    saveQuotations(newQuotations)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (quotation: Quotation) => {
@@ -180,12 +195,23 @@ export default function QuotationsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this quotation?")) {
-      const newQuotations = quotations.filter((q) => q.id !== id)
-      saveQuotations(newQuotations)
+  const handleDelete = async (id: string) => {
+    try {
+      await quotationsAPI.delete(id)
+      await loadQuotations()
       showToast("Quotation deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete quotation", "error")
+      console.error("Error deleting quotation:", error)
     }
+  }
+
+  const openDeleteModal = (quotation: Quotation) => {
+    setDeleteModal({ isOpen: true, quotation })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, quotation: null })
   }
   const handleDownloadPDF = (q: Quotation) => {
     try {
@@ -363,7 +389,7 @@ export default function QuotationsPage() {
                         {q.date}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(q.currency)}{q.totalAmount.toFixed(2)}
+                        {getCurrencySymbol(q.currency)}{(q.totalAmount || 0).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {q.currency}
@@ -372,7 +398,7 @@ export default function QuotationsPage() {
                         <ul className="list-disc list-inside">
                           {q.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} - {item.description} (Amount: {getCurrencySymbol(q.currency)}{item.amount.toFixed(2)})
+                              {item.itemName} - {item.description} (Amount: {getCurrencySymbol(q.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -386,7 +412,7 @@ export default function QuotationsPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(q.id)}
+                            onClick={() => openDeleteModal(q)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -416,12 +442,12 @@ export default function QuotationsPage() {
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{q.id}</p>
                         <p className="text-gray-500 text-sm">Date: {q.date}</p>
-                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(q.currency)}{q.totalAmount.toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(q.currency)}{(q.totalAmount || 0).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {q.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">
                           {q.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} - {item.description} (Amount: {getCurrencySymbol(q.currency)}{item.amount.toFixed(2)})
+                              {item.itemName} - {item.description} (Amount: {getCurrencySymbol(q.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -434,7 +460,7 @@ export default function QuotationsPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(q.id)}
+                          onClick={() => openDeleteModal(q)}
                           className="p-1 text-red-600 hover:text-red-800"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -587,6 +613,16 @@ export default function QuotationsPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.quotation && handleDelete(deleteModal.quotation.id)}
+          title="Delete Quotation"
+          message="Are you sure you want to delete this quotation? This action cannot be undone."
+          itemName={deleteModal.quotation?.id}
+        />
       </div>
     </DashboardLayout>
   )

@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout" // Ensure
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
+import { purchaseOrdersAPI, productsAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 import jsPDF from "jspdf"
 
 interface Product {
@@ -37,6 +39,11 @@ export default function PurchaseOrdersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; purchaseOrder: PurchaseOrder | null }>({
+    isOpen: false,
+    purchaseOrder: null,
+  })
   const [formData, setFormData] = useState({
     supplier: "",
     date: new Date().toISOString().split('T')[0],
@@ -55,24 +62,30 @@ export default function PurchaseOrdersPage() {
     filterPurchaseOrders()
   }, [purchaseOrders, searchTerm])
 
-  const loadPurchaseOrders = () => {
-    const savedPurchaseOrders = localStorage.getItem("purchaseOrders")
-    if (savedPurchaseOrders) {
-      const parsedPurchaseOrders = JSON.parse(savedPurchaseOrders)
-      setPurchaseOrders(parsedPurchaseOrders)
+  const loadPurchaseOrders = async () => {
+    try {
+      setLoading(true)
+      const data = await purchaseOrdersAPI.getAll()
+      setPurchaseOrders(data)
+    } catch (error) {
+      showToast("Failed to load purchase orders", "error")
+      console.error("Error loading purchase orders:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem("products")
-    if (savedProducts) {
-      const parsedProducts = JSON.parse(savedProducts)
-      setProducts(parsedProducts)
+  const loadProducts = async () => {
+    try {
+      const data = await productsAPI.getAll()
+      setProducts(data)
+    } catch (error) {
+      showToast("Failed to load products", "error")
+      console.error("Error loading products:", error)
     }
   }
 
-  const savePurchaseOrders = (newPurchaseOrders: PurchaseOrder[]) => {
-    localStorage.setItem("purchaseOrders", JSON.stringify(newPurchaseOrders))
+  const savePurchaseOrders = async (newPurchaseOrders: PurchaseOrder[]) => {
     setPurchaseOrders(newPurchaseOrders)
   }
 
@@ -130,7 +143,7 @@ export default function PurchaseOrdersPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.supplier || !formData.currency || formData.items.some(item => !item.itemName || !item.quantity || !item.unitPrice)) {
@@ -155,20 +168,22 @@ export default function PurchaseOrdersPage() {
       currency: formData.currency,
     }
 
-    let newPurchaseOrders: PurchaseOrder[]
-    if (editingPurchaseOrder) {
-      newPurchaseOrders = purchaseOrders.map((po) =>
-        po.id === editingPurchaseOrder.id ? purchaseOrderData : po
-      )
-      showToast("Purchase order updated successfully!", "success")
-    } else {
-      newPurchaseOrders = [...purchaseOrders, purchaseOrderData]
-      showToast("Purchase order added successfully!", "success")
+    try {
+      if (editingPurchaseOrder) {
+        await purchaseOrdersAPI.update(purchaseOrderData)
+        showToast("Purchase order updated successfully!", "success")
+      } else {
+        await purchaseOrdersAPI.create(purchaseOrderData)
+        showToast("Purchase order added successfully!", "success")
+      }
+      
+      await loadPurchaseOrders()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save purchase order", "error")
+      console.error("Error saving purchase order:", error)
     }
-
-    savePurchaseOrders(newPurchaseOrders)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (purchaseOrder: PurchaseOrder) => {
@@ -187,12 +202,23 @@ export default function PurchaseOrdersPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this purchase order?")) {
-      const newPurchaseOrders = purchaseOrders.filter((po) => po.id !== id)
-      savePurchaseOrders(newPurchaseOrders)
+  const handleDelete = async (id: string) => {
+    try {
+      await purchaseOrdersAPI.delete(id)
+      await loadPurchaseOrders()
       showToast("Purchase order deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete purchase order", "error")
+      console.error("Error deleting purchase order:", error)
     }
+  }
+
+  const openDeleteModal = (purchaseOrder: PurchaseOrder) => {
+    setDeleteModal({ isOpen: true, purchaseOrder })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, purchaseOrder: null })
   }
 
   const handleDownloadPDF = (po: PurchaseOrder) => {
@@ -374,7 +400,7 @@ export default function PurchaseOrdersPage() {
                         {po.date}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(po.currency)}{po.totalAmount.toFixed(2)}
+                        {getCurrencySymbol(po.currency)}{(po.totalAmount || 0).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.currency}
@@ -383,7 +409,7 @@ export default function PurchaseOrdersPage() {
                         <ul className="list-disc list-inside">
                           {po.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} (Qty: {item.quantity}, {getCurrencySymbol(po.currency)}{item.unitPrice.toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{item.amount.toFixed(2)})
+                              {item.itemName} (Qty: {item.quantity || 0}, {getCurrencySymbol(po.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -397,7 +423,7 @@ export default function PurchaseOrdersPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(po.id)}
+                            onClick={() => openDeleteModal(po)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -428,12 +454,12 @@ export default function PurchaseOrdersPage() {
                         <p className="font-medium text-gray-900 text-sm">{po.id}</p>
                         <p className="text-gray-500 text-sm">Supplier: {po.supplier}</p>
                         <p className="text-gray-500 text-sm">Date: {po.date}</p>
-                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{po.totalAmount.toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{(po.totalAmount || 0).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {po.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">
                           {po.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} (Qty: {item.quantity}, {getCurrencySymbol(po.currency)}{item.unitPrice.toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{item.amount.toFixed(2)})
+                              {item.itemName} (Qty: {item.quantity || 0}, {getCurrencySymbol(po.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -446,7 +472,7 @@ export default function PurchaseOrdersPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(po.id)}
+                          onClick={() => openDeleteModal(po)}
                           className="p-1 text-red-600 hover:text-red-800"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -622,6 +648,16 @@ export default function PurchaseOrdersPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.purchaseOrder && handleDelete(deleteModal.purchaseOrder.id)}
+          title="Delete Purchase Order"
+          message="Are you sure you want to delete this purchase order? This action cannot be undone."
+          itemName={deleteModal.purchaseOrder?.id}
+        />
       </div>
     </DashboardLayout>
   )

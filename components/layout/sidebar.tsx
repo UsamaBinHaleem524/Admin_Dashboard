@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, ShoppingCart, Package, Users, Truck, LogOut, Menu, X, CreditCard, ReceiptIcon, Box } from "lucide-react"
+import { LayoutDashboard, ShoppingCart, Package, Users, Truck, LogOut, Menu, X, CreditCard, ReceiptIcon, Box, DollarSign } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 
 const navigation = [
@@ -13,11 +13,12 @@ const navigation = [
   { name: "Purchases", path: "/purchases", icon: Package },
   { name: "Customer Ledger", path: "/customer-ledger", icon: Users },
   { name: "Supplier Ledger", path: "/supplier-ledger", icon: Truck },
-  { name: "Puchase Orders", path: "/purchase-order", icon: CreditCard },
+  { name: "Purchase Orders", path: "/purchase-order", icon: CreditCard },
   { name: "Invoices", path: "/invoices", icon: ReceiptIcon },
   { name: "Quotation", path: "/quotation", icon: CreditCard },
   { name: "Products", path: "/products", icon: Box },
-  { name: "Expense Tracker", path: "/expense-tracker", icon: ShoppingCart },
+  { name: "Goods Expense", path: "/expense-tracker", icon: ShoppingCart },
+  { name: "Shop Expense", path: "/shop-expenses", icon: DollarSign },
 ]
 
 export function Sidebar() {

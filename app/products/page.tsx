@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
+import { productsAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 
 interface Product {
   id: string
@@ -19,6 +21,11 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; product: Product | null }>({
+    isOpen: false,
+    product: null,
+  })
   const [formData, setFormData] = useState({
     name: "",
     date: new Date().toISOString().split('T')[0],
@@ -33,16 +40,20 @@ export default function ProductsPage() {
     filterProducts()
   }, [products, searchTerm])
 
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem("products")
-    if (savedProducts) {
-      const parsedProducts = JSON.parse(savedProducts)
-      setProducts(parsedProducts)
+  const loadProducts = async () => {
+    try {
+      setLoading(true)
+      const data = await productsAPI.getAll()
+      setProducts(data)
+    } catch (error) {
+      showToast("Failed to load products", "error")
+      console.error("Error loading products:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const saveProducts = (newProducts: Product[]) => {
-    localStorage.setItem("products", JSON.stringify(newProducts))
+  const saveProducts = async (newProducts: Product[]) => {
     setProducts(newProducts)
   }
 
@@ -59,7 +70,7 @@ export default function ProductsPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.name) {
@@ -75,20 +86,22 @@ export default function ProductsPage() {
       date: formData.date,
     }
 
-    let newProducts: Product[]
-    if (editingProduct) {
-      newProducts = products.map((product) =>
-        product.id === editingProduct.id ? productData : product
-      )
-      showToast("Product updated successfully!", "success")
-    } else {
-      newProducts = [...products, productData]
-      showToast("Product added successfully!", "success")
+    try {
+      if (editingProduct) {
+        await productsAPI.update(productData)
+        showToast("Product updated successfully!", "success")
+      } else {
+        await productsAPI.create(productData)
+        showToast("Product added successfully!", "success")
+      }
+      
+      await loadProducts()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save product", "error")
+      console.error("Error saving product:", error)
     }
-
-    saveProducts(newProducts)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (product: Product) => {
@@ -100,12 +113,23 @@ export default function ProductsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this product?")) {
-      const newProducts = products.filter((product) => product.id !== id)
-      saveProducts(newProducts)
+  const handleDelete = async (id: string) => {
+    try {
+      await productsAPI.delete(id)
+      await loadProducts()
       showToast("Product deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete product", "error")
+      console.error("Error deleting product:", error)
     }
+  }
+
+  const openDeleteModal = (product: Product) => {
+    setDeleteModal({ isOpen: true, product })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, product: null })
   }
 
   const resetForm = () => {
@@ -200,7 +224,7 @@ export default function ProductsPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(product.id)}
+                            onClick={() => openDeleteModal(product)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -301,6 +325,16 @@ export default function ProductsPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.product && handleDelete(deleteModal.product.id)}
+          title="Delete Product"
+          message="Are you sure you want to delete this product? This action cannot be undone."
+          itemName={deleteModal.product?.name}
+        />
       </div>
     </DashboardLayout>
   )

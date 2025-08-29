@@ -5,6 +5,8 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
+import { purchasesAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 
 interface Purchase {
   id: string
@@ -20,6 +22,11 @@ export default function PurchasesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; purchase: Purchase | null }>({
+    isOpen: false,
+    purchase: null,
+  })
   const [formData, setFormData] = useState({
     supplier: "",
     description: "",
@@ -36,16 +43,20 @@ export default function PurchasesPage() {
     filterPurchases()
   }, [purchases, searchTerm])
 
-  const loadPurchases = () => {
-    const savedPurchases = localStorage.getItem("purchases")
-    if (savedPurchases) {
-      const parsedPurchases = JSON.parse(savedPurchases)
-      setPurchases(parsedPurchases)
+  const loadPurchases = async () => {
+    try {
+      setLoading(true)
+      const data = await purchasesAPI.getAll()
+      setPurchases(data)
+    } catch (error) {
+      showToast("Failed to load purchases", "error")
+      console.error("Error loading purchases:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const savePurchases = (newPurchases: Purchase[]) => {
-    localStorage.setItem("purchases", JSON.stringify(newPurchases))
+  const savePurchases = async (newPurchases: Purchase[]) => {
     setPurchases(newPurchases)
   }
 
@@ -63,7 +74,7 @@ export default function PurchasesPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.supplier || !formData.description || !formData.amount || !formData.date) {
@@ -79,18 +90,22 @@ export default function PurchasesPage() {
       date: formData.date,
     }
 
-    let newPurchases: Purchase[]
-    if (editingPurchase) {
-      newPurchases = purchases.map((purchase) => (purchase.id === editingPurchase.id ? purchaseData : purchase))
-      showToast("Purchase updated successfully!", "success")
-    } else {
-      newPurchases = [...purchases, purchaseData]
-      showToast("Purchase added successfully!", "success")
+    try {
+      if (editingPurchase) {
+        await purchasesAPI.update(purchaseData)
+        showToast("Purchase updated successfully!", "success")
+      } else {
+        await purchasesAPI.create(purchaseData)
+        showToast("Purchase added successfully!", "success")
+      }
+      
+      await loadPurchases()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save purchase", "error")
+      console.error("Error saving purchase:", error)
     }
-
-    savePurchases(newPurchases)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (purchase: Purchase) => {
@@ -104,12 +119,23 @@ export default function PurchasesPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this purchase?")) {
-      const newPurchases = purchases.filter((purchase) => purchase.id !== id)
-      savePurchases(newPurchases)
+  const handleDelete = async (id: string) => {
+    try {
+      await purchasesAPI.delete(id)
+      await loadPurchases()
       showToast("Purchase deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete purchase", "error")
+      console.error("Error deleting purchase:", error)
     }
+  }
+
+  const openDeleteModal = (purchase: Purchase) => {
+    setDeleteModal({ isOpen: true, purchase })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, purchase: null })
   }
 
   const resetForm = () => {
@@ -207,7 +233,7 @@ export default function PurchasesPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(purchase.id)}
+                            onClick={() => openDeleteModal(purchase)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -224,7 +250,7 @@ export default function PurchasesPage() {
 
         {/* Modal */}
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center !mt-0 justify-center z-50 px-4 sm:px-0">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-md">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingPurchase ? "Edit Purchase" : "Add New Purchase"}
@@ -301,6 +327,16 @@ export default function PurchasesPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.purchase && handleDelete(deleteModal.purchase.id)}
+          title="Delete Purchase"
+          message="Are you sure you want to delete this purchase? This action cannot be undone."
+          itemName={`${deleteModal.purchase?.supplier} - ${deleteModal.purchase?.description}`}
+        />
       </div>
     </DashboardLayout>
   )

@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
+import { invoicesAPI, productsAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 import jsPDF from "jspdf"
 
 interface Product {
@@ -40,6 +42,11 @@ export default function InvoicesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; invoice: Invoice | null }>({
+    isOpen: false,
+    invoice: null,
+  })
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     invoiceType: "Simple" as "Simple" | "Proforma",
@@ -57,24 +64,30 @@ export default function InvoicesPage() {
     filterInvoices()
   }, [invoices, searchTerm])
 
-  const loadInvoices = () => {
-    const savedInvoices = localStorage.getItem("invoices")
-    if (savedInvoices) {
-      const parsedInvoices = JSON.parse(savedInvoices)
-      setInvoices(parsedInvoices)
+  const loadInvoices = async () => {
+    try {
+      setLoading(true)
+      const data = await invoicesAPI.getAll()
+      setInvoices(data)
+    } catch (error) {
+      showToast("Failed to load invoices", "error")
+      console.error("Error loading invoices:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadProducts = () => {
-    const savedProducts = localStorage.getItem("products")
-    if (savedProducts) {
-      const parsedProducts = JSON.parse(savedProducts)
-      setProducts(parsedProducts)
+  const loadProducts = async () => {
+    try {
+      const data = await productsAPI.getAll()
+      setProducts(data)
+    } catch (error) {
+      showToast("Failed to load products", "error")
+      console.error("Error loading products:", error)
     }
   }
 
-  const saveInvoices = (newInvoices: Invoice[]) => {
-    localStorage.setItem("invoices", JSON.stringify(newInvoices))
+  const saveInvoices = async (newInvoices: Invoice[]) => {
     setInvoices(newInvoices)
   }
 
@@ -139,7 +152,7 @@ export default function InvoicesPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (formData.items.some(item => !item.itemName || !item.description || !item.quantity || !item.unit || !item.unitPrice || !item.vatPercentage)) {
@@ -172,20 +185,22 @@ export default function InvoicesPage() {
       currency: formData.currency,
     }
 
-    let newInvoices: Invoice[]
-    if (editingInvoice) {
-      newInvoices = invoices.map((inv) =>
-        inv.id === editingInvoice.id ? invoiceData : inv
-      )
-      showToast("Invoice updated successfully!", "success")
-    } else {
-      newInvoices = [...invoices, invoiceData]
-      showToast("Invoice added successfully!", "success")
+    try {
+      if (editingInvoice) {
+        await invoicesAPI.update(invoiceData)
+        showToast("Invoice updated successfully!", "success")
+      } else {
+        await invoicesAPI.create(invoiceData)
+        showToast("Invoice added successfully!", "success")
+      }
+      
+      await loadInvoices()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save invoice", "error")
+      console.error("Error saving invoice:", error)
     }
-
-    saveInvoices(newInvoices)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (invoice: Invoice) => {
@@ -207,12 +222,23 @@ export default function InvoicesPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this invoice?")) {
-      const newInvoices = invoices.filter((inv) => inv.id !== id)
-      saveInvoices(newInvoices)
+  const handleDelete = async (id: string) => {
+    try {
+      await invoicesAPI.delete(id)
+      await loadInvoices()
       showToast("Invoice deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete invoice", "error")
+      console.error("Error deleting invoice:", error)
     }
+  }
+
+  const openDeleteModal = (invoice: Invoice) => {
+    setDeleteModal({ isOpen: true, invoice })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, invoice: null })
   }
 
   const handleDownloadPDF = (inv: Invoice) => {
@@ -410,7 +436,7 @@ export default function InvoicesPage() {
                         {inv.date}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(inv.currency)}{inv.totalAmount.toFixed(2)}
+                        {getCurrencySymbol(inv.currency)}{(inv.totalAmount || 0).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {inv.currency}
@@ -419,7 +445,7 @@ export default function InvoicesPage() {
                         <ul className="list-disc list-inside">
                           {inv.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} - {item.description} (Qty: {item.quantity} {item.unit}, {getCurrencySymbol(inv.currency)}{item.unitPrice.toFixed(2)}/unit, VAT: {item.vatPercentage}%, Total: {getCurrencySymbol(inv.currency)}{item.amount.toFixed(2)})
+                              {item.itemName} - {item.description} (Qty: {item.quantity || 0} {item.unit}, {getCurrencySymbol(inv.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, VAT: {item.vatPercentage || 0}%, Total: {getCurrencySymbol(inv.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -433,7 +459,7 @@ export default function InvoicesPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(inv.id)}
+                            onClick={() => openDeleteModal(inv)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -464,12 +490,12 @@ export default function InvoicesPage() {
                         <p className="font-medium text-gray-900 text-sm">{inv.id}</p>
                         <p className="text-gray-500 text-sm">Type: {inv.invoiceType}</p>
                         <p className="text-gray-500 text-sm">Date: {inv.date}</p>
-                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{inv.totalAmount.toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{(inv.totalAmount || 0).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {inv.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">
                           {inv.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} - {item.description} (Qty: {item.quantity} {item.unit}, {getCurrencySymbol(inv.currency)}{item.unitPrice.toFixed(2)}/unit, VAT: {item.vatPercentage}%, Total: {getCurrencySymbol(inv.currency)}{item.amount.toFixed(2)})
+                              {item.itemName} - {item.description} (Qty: {item.quantity || 0} {item.unit}, {getCurrencySymbol(inv.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, VAT: {item.vatPercentage || 0}%, Total: {getCurrencySymbol(inv.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -482,7 +508,7 @@ export default function InvoicesPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(inv.id)}
+                          onClick={() => openDeleteModal(inv)}
                           className="p-1 text-red-600 hover:text-red-800"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -701,6 +727,16 @@ export default function InvoicesPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.invoice && handleDelete(deleteModal.invoice.id)}
+          title="Delete Invoice"
+          message="Are you sure you want to delete this invoice? This action cannot be undone."
+          itemName={deleteModal.invoice?.id}
+        />
       </div>
     </DashboardLayout>
   )

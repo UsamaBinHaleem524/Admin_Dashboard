@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, Calendar, Check } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
+import { expensesAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 
 interface ExpenseItem {
   name: string
@@ -28,6 +30,11 @@ export default function ExpenseTrackerPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [currentTotal, setCurrentTotal] = useState("0.00")
   const [isTotalEditable, setIsTotalEditable] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; expenseIndex: number | null }>({
+    isOpen: false,
+    expenseIndex: null,
+  })
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -43,22 +50,26 @@ export default function ExpenseTrackerPage() {
     updateCurrentTotalAndFilter()
   }, [dailyExpenses, selectedDate, searchTerm])
 
-  const loadExpenses = () => {
-    const savedExpenses = localStorage.getItem("dailyExpenses")
-    if (savedExpenses) {
-      const parsedExpenses = JSON.parse(savedExpenses)
-      const sortedExpenses = parsedExpenses.sort((a: DailyExpense, b: DailyExpense) => 
+  const loadExpenses = async () => {
+    try {
+      setLoading(true)
+      const data = await expensesAPI.getAll()
+      const sortedExpenses = data.sort((a: DailyExpense, b: DailyExpense) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
       )
       setDailyExpenses(sortedExpenses)
+    } catch (error) {
+      showToast("Failed to load expenses", "error")
+      console.error("Error loading expenses:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const saveExpenses = (newExpenses: DailyExpense[]) => {
+  const saveExpenses = async (newExpenses: DailyExpense[]) => {
     const sortedExpenses = newExpenses.sort((a: DailyExpense, b: DailyExpense) => 
       new Date(b.date).getTime() - new Date(a.date).getTime()
     )
-    localStorage.setItem("dailyExpenses", JSON.stringify(sortedExpenses))
     setDailyExpenses(sortedExpenses)
   }
 
@@ -101,7 +112,7 @@ export default function ExpenseTrackerPage() {
     }
   }
 
-  const handleSaveTotal = () => {
+  const handleSaveTotal = async () => {
     const num = parseFloat(currentTotal)
     if (isNaN(num) || num < 0) {
       showToast("Invalid total amount. Please enter a non-negative number.", "error")
@@ -110,19 +121,34 @@ export default function ExpenseTrackerPage() {
       return
     }
 
-    let newExpenses = [...dailyExpenses]
-    const entryIndex = newExpenses.findIndex(d => d.date === selectedDate)
-    if (entryIndex === -1) {
-      newExpenses.push({ date: selectedDate, totalAmount: num, expenses: [] })
-    } else {
-      newExpenses[entryIndex].totalAmount = num
+    try {
+      let newExpenses = [...dailyExpenses]
+      const entryIndex = newExpenses.findIndex(d => d.date === selectedDate)
+      if (entryIndex === -1) {
+        newExpenses.push({ date: selectedDate, totalAmount: num, expenses: [] })
+      } else {
+        newExpenses[entryIndex].totalAmount = num
+      }
+      
+      const entryToSave = newExpenses.find(d => d.date === selectedDate)
+      if (entryToSave) {
+        if (entryIndex === -1) {
+          await expensesAPI.create(entryToSave)
+        } else {
+          await expensesAPI.update(entryToSave)
+        }
+      }
+      
+      await saveExpenses(newExpenses)
+      setIsTotalEditable(false)
+      showToast("Total amount updated", "success")
+    } catch (error) {
+      showToast("Failed to update total amount", "error")
+      console.error("Error updating total amount:", error)
     }
-    saveExpenses(newExpenses)
-    setIsTotalEditable(false)
-    showToast("Total amount updated", "success")
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.name || !formData.description || !formData.amount || isNaN(parseFloat(formData.amount))) {
@@ -159,23 +185,37 @@ export default function ExpenseTrackerPage() {
       amount: newItemAmount,
     }
 
-    let newDailyExpenses = [...dailyExpenses]
-    let entryIndex = newDailyExpenses.findIndex(d => d.date === selectedDate)
+    try {
+      let newDailyExpenses = [...dailyExpenses]
+      let entryIndex = newDailyExpenses.findIndex(d => d.date === selectedDate)
 
-    if (entryIndex === -1) {
-      newDailyExpenses.push({ date: selectedDate, totalAmount: parseFloat(currentTotal) || 0, expenses: [newItem] })
-    } else {
-      if (editingItemIndex !== null) {
-        newDailyExpenses[entryIndex].expenses[editingItemIndex] = newItem
+      if (entryIndex === -1) {
+        newDailyExpenses.push({ date: selectedDate, totalAmount: parseFloat(currentTotal) || 0, expenses: [newItem] })
       } else {
-        newDailyExpenses[entryIndex].expenses.push(newItem)
+        if (editingItemIndex !== null) {
+          newDailyExpenses[entryIndex].expenses[editingItemIndex] = newItem
+        } else {
+          newDailyExpenses[entryIndex].expenses.push(newItem)
+        }
       }
-    }
 
-    saveExpenses(newDailyExpenses)
-    showToast(editingItemIndex !== null ? "Expense updated successfully!" : "Expense added successfully!", "success")
-    resetForm()
-    setIsDialogOpen(false)
+      const entryToSave = newDailyExpenses.find(d => d.date === selectedDate)
+      if (entryToSave) {
+        if (entryIndex === -1) {
+          await expensesAPI.create(entryToSave)
+        } else {
+          await expensesAPI.update(entryToSave)
+        }
+      }
+
+      await saveExpenses(newDailyExpenses)
+      showToast(editingItemIndex !== null ? "Expense updated successfully!" : "Expense added successfully!", "success")
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save expense", "error")
+      console.error("Error saving expense:", error)
+    }
   }
 
   const handleEdit = (index: number) => {
@@ -191,16 +231,35 @@ export default function ExpenseTrackerPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (index: number) => {
-    if (confirm("Are you sure you want to delete this expense?")) {
+  const handleDelete = async (index: number) => {
+    try {
       let newDailyExpenses = [...dailyExpenses]
       const entryIndex = newDailyExpenses.findIndex(d => d.date === selectedDate)
       if (entryIndex !== -1) {
         newDailyExpenses[entryIndex].expenses.splice(index, 1)
-        saveExpenses(newDailyExpenses)
+        
+        const entryToSave = newDailyExpenses[entryIndex]
+        if (entryToSave.expenses.length === 0) {
+          await expensesAPI.delete(selectedDate)
+        } else {
+          await expensesAPI.update(entryToSave)
+        }
+        
+        await saveExpenses(newDailyExpenses)
         showToast("Expense deleted successfully!", "success")
       }
+    } catch (error) {
+      showToast("Failed to delete expense", "error")
+      console.error("Error deleting expense:", error)
     }
+  }
+
+  const openDeleteModal = (index: number) => {
+    setDeleteModal({ isOpen: true, expenseIndex: index })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, expenseIndex: null })
   }
 
   const resetForm = () => {
@@ -228,7 +287,7 @@ export default function ExpenseTrackerPage() {
       <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Expense Tracker</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Goods Expense</h1>
             <p className="text-sm sm:text-base text-gray-600">Manage daily expenses</p>
           </div>
           <button
@@ -365,7 +424,7 @@ export default function ExpenseTrackerPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(index)}
+                            onClick={() => openDeleteModal(index)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -399,7 +458,7 @@ export default function ExpenseTrackerPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(index)}
+                          onClick={() => openDeleteModal(index)}
                           className="p-1 text-red-600 hover:text-red-800"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -479,6 +538,17 @@ export default function ExpenseTrackerPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.expenseIndex !== null && handleDelete(deleteModal.expenseIndex)}
+          title="Delete Expense"
+          message="Are you sure you want to delete this expense? This action cannot be undone."
+          itemName={deleteModal.expenseIndex !== null ? 
+            dailyExpenses.find(d => d.date === selectedDate)?.expenses[deleteModal.expenseIndex]?.name : undefined}
+        />
       </div>
     </DashboardLayout>
   )

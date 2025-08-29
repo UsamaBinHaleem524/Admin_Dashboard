@@ -5,6 +5,8 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
+import { salesAPI } from "@/lib/api"
+import { DeleteModal } from "@/components/ui/delete-modal"
 
 
 interface Sale {
@@ -21,6 +23,11 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingSale, setEditingSale] = useState<Sale | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; sale: Sale | null }>({
+    isOpen: false,
+    sale: null,
+  })
   const [formData, setFormData] = useState({
     customer: "",
     description: "",
@@ -37,16 +44,20 @@ export default function SalesPage() {
     filterSales()
   }, [sales, searchTerm])
 
-  const loadSales = () => {
-    const savedSales = localStorage.getItem("sales")
-    if (savedSales) {
-      const parsedSales = JSON.parse(savedSales)
-      setSales(parsedSales)
+  const loadSales = async () => {
+    try {
+      setLoading(true)
+      const data = await salesAPI.getAll()
+      setSales(data)
+    } catch (error) {
+      showToast("Failed to load sales", "error")
+      console.error("Error loading sales:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const saveSales = (newSales: Sale[]) => {
-    localStorage.setItem("sales", JSON.stringify(newSales))
+  const saveSales = async (newSales: Sale[]) => {
     setSales(newSales)
   }
 
@@ -64,7 +75,7 @@ export default function SalesPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.customer || !formData.description || !formData.amount || !formData.date) {
@@ -80,18 +91,22 @@ export default function SalesPage() {
       date: formData.date,
     }
 
-    let newSales: Sale[]
-    if (editingSale) {
-      newSales = sales.map((sale) => (sale.id === editingSale.id ? saleData : sale))
-      showToast("Sale updated successfully!", "success")
-    } else {
-      newSales = [...sales, saleData]
-      showToast("Sale added successfully!", "success")
+    try {
+      if (editingSale) {
+        await salesAPI.update(saleData)
+        showToast("Sale updated successfully!", "success")
+      } else {
+        await salesAPI.create(saleData)
+        showToast("Sale added successfully!", "success")
+      }
+      
+      await loadSales()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      showToast("Failed to save sale", "error")
+      console.error("Error saving sale:", error)
     }
-
-    saveSales(newSales)
-    resetForm()
-    setIsDialogOpen(false)
   }
 
   const handleEdit = (sale: Sale) => {
@@ -105,12 +120,23 @@ export default function SalesPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this sale?")) {
-      const newSales = sales.filter((sale) => sale.id !== id)
-      saveSales(newSales)
+  const handleDelete = async (id: string) => {
+    try {
+      await salesAPI.delete(id)
+      await loadSales()
       showToast("Sale deleted successfully!", "success")
+    } catch (error) {
+      showToast("Failed to delete sale", "error")
+      console.error("Error deleting sale:", error)
     }
+  }
+
+  const openDeleteModal = (sale: Sale) => {
+    setDeleteModal({ isOpen: true, sale })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, sale: null })
   }
 
   const resetForm = () => {
@@ -206,7 +232,7 @@ export default function SalesPage() {
                             <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(sale.id)}
+                            onClick={() => openDeleteModal(sale)}
                             className="p-1 text-red-600 hover:text-red-800"
                           >
                             <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -223,7 +249,7 @@ export default function SalesPage() {
 
         {/* Modal */}
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 sm:px-0">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex !mt-0 items-center justify-center z-50 px-4 sm:px-0">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-md">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingSale ? "Edit Sale" : "Add New Sale"}
@@ -300,6 +326,16 @@ export default function SalesPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Modal */}
+        <DeleteModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={() => deleteModal.sale && handleDelete(deleteModal.sale.id)}
+          title="Delete Sale"
+          message="Are you sure you want to delete this sale? This action cannot be undone."
+          itemName={`${deleteModal.sale?.customer} - ${deleteModal.sale?.description}`}
+        />
       </div>
     </DashboardLayout>
   )
