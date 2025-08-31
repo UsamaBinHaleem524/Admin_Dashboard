@@ -8,7 +8,9 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { quotationsAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 import jsPDF from "jspdf"
+import { getCompanyProfile, getDefaultCompanyProfile } from "@/lib/company-profile-utils"
 
 interface Product {
   id: string
@@ -35,6 +37,8 @@ export default function QuotationsPage() {
   const [filteredQuotations, setFilteredQuotations] = useState<Quotation[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null)
   const [loading, setLoading] = useState(false)
@@ -57,6 +61,10 @@ export default function QuotationsPage() {
   useEffect(() => {
     filterQuotations()
   }, [quotations, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadQuotations = async () => {
     try {
@@ -213,10 +221,13 @@ export default function QuotationsPage() {
   const closeDeleteModal = () => {
     setDeleteModal({ isOpen: false, quotation: null })
   }
-  const handleDownloadPDF = (q: Quotation) => {
+  const handleDownloadPDF = async (q: Quotation) => {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
+  
+      // Get company profile data
+      const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
   
       // Logo (top-left corner)
       const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -227,15 +238,25 @@ export default function QuotationsPage() {
       doc.setFont("helvetica", "bold");
       doc.text("QUOTATION", pageWidth / 2, 30, { align: "center" });
   
+      // Company information
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.text(companyProfile.name, pageWidth / 2, 40, { align: "center" });
+  
+      doc.setFontSize(10);
+      doc.text(companyProfile.contact, 10, 50);
+      doc.text(companyProfile.email, 10, 55);
+      doc.text(companyProfile.address, 10, 60);
+  
       // Quotation details
       doc.setFontSize(12);
       doc.setFont("helvetica", "normal");
-      doc.text(`Quotation ID: ${q.id}`, 10, 40);
-      doc.text(`Date: ${q.date}`, 10, 47);
-      doc.text(`Currency: ${q.currency}`, 10, 54);
+      doc.text(`Quotation ID: ${q.id}`, 10, 70);
+      doc.text(`Date: ${q.date}`, 10, 77);
+      doc.text(`Currency: ${q.currency}`, 10, 84);
   
       // Table headers
-      let y = 65;
+      let y = 95;
       doc.setFontSize(12);
       doc.setFont("courier", "bold");
   
@@ -276,7 +297,7 @@ export default function QuotationsPage() {
         doc.text(`${index + 1}`, colX.index, y);
         doc.text(item.itemName, colX.itemName, y, { maxWidth: 45 });
         doc.text(item.description, colX.description, y, { maxWidth: 80 });
-        doc.text(`${getCurrencySymbol(q.currency)}${item.amount.toFixed(2)}`, colX.amount, y, { align: "right" });
+        doc.text(`${getCurrencySymbol(q.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount, y, { align: "right" });
         y += 7;
       });
   
@@ -293,7 +314,7 @@ export default function QuotationsPage() {
   
       doc.setFont("courier", "bold");
       doc.text("Total Amount:", 110, y); // Moved left to create more space before amount
-      doc.text(`${getCurrencySymbol(q.currency)}${q.totalAmount.toFixed(2)}`, colX.amount, y, { align: "right", maxWidth: 100 }); // Increased space and added maxWidth
+      doc.text(`${getCurrencySymbol(q.currency)}${(q.totalAmount || 0).toFixed(2)}`, colX.amount, y, { align: "right", maxWidth: 100 }); // Increased space and added maxWidth
   
       // Save
       doc.save(`Quotation_${q.id}.pdf`);
@@ -316,6 +337,16 @@ export default function QuotationsPage() {
   const openAddDialog = () => {
     resetForm()
     setIsDialogOpen(true)
+  }
+
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredQuotations.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredQuotations.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
   }
 
   return (
@@ -373,14 +404,14 @@ export default function QuotationsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredQuotations.length === 0 ? (
+                {currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No quotations found
                     </td>
                   </tr>
                 ) : (
-                  filteredQuotations.map((q) => (
+                  currentItems.map((q) => (
                     <tr key={q.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {q.id}
@@ -431,12 +462,12 @@ export default function QuotationsPage() {
               </tbody>
             </table>
             <div className="md:hidden divide-y divide-gray-200">
-              {filteredQuotations.length === 0 ? (
+              {currentItems.length === 0 ? (
                 <div className="p-6 text-center text-gray-500 text-sm">
                   No quotations found
                 </div>
               ) : (
-                filteredQuotations.map((q) => (
+                currentItems.map((q) => (
                   <div key={q.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -479,6 +510,17 @@ export default function QuotationsPage() {
             </div>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredQuotations.length}
+          />
+        )}
 
         {isDialogOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">

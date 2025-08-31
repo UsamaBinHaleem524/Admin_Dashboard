@@ -8,7 +8,9 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { invoicesAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 import jsPDF from "jspdf"
+import { getCompanyProfile, getDefaultCompanyProfile } from "@/lib/company-profile-utils"
 
 interface Product {
   id: string
@@ -40,6 +42,8 @@ export default function InvoicesPage() {
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(false)
@@ -63,6 +67,10 @@ export default function InvoicesPage() {
   useEffect(() => {
     filterInvoices()
   }, [invoices, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadInvoices = async () => {
     try {
@@ -241,10 +249,13 @@ export default function InvoicesPage() {
     setDeleteModal({ isOpen: false, invoice: null })
   }
 
-  const handleDownloadPDF = (inv: Invoice) => {
+  const handleDownloadPDF = async (inv: Invoice) => {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
+  
+      // Get company profile data
+      const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
   
       // Logo (top-left corner)
       const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -255,14 +266,24 @@ export default function InvoicesPage() {
       doc.setFont("helvetica", "bold");
       doc.text(`${inv.invoiceType.toUpperCase()} INVOICE`, pageWidth / 2, 30, { align: "center" });
   
+      // Company information
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.text(companyProfile.name, pageWidth / 2, 40, { align: "center" });
+  
+      doc.setFontSize(10);
+      doc.text(companyProfile.contact, 10, 50);
+      doc.text(companyProfile.email, 10, 55);
+      doc.text(companyProfile.address, 10, 60);
+  
       // Invoice details
       doc.setFontSize(12);
       doc.setFont("helvetica", "normal");
-      doc.text(`Invoice ID: ${inv.id}`, 10, 40);
-      doc.text(`Date: ${inv.date}`, 10, 47);
+      doc.text(`Invoice ID: ${inv.id}`, 10, 70);
+      doc.text(`Date: ${inv.date}`, 10, 77);
   
       // Table headers
-      let y = 60;
+      let y = 85;
       doc.setFontSize(12);
       doc.setFont("courier", "bold");
   
@@ -313,9 +334,9 @@ export default function InvoicesPage() {
         doc.text(item.itemName, colX.itemName, y);
         doc.text(item.description, colX.description, y);
         doc.text(item.quantity.toString(), colX.quantity, y, { align: "center" });
-        doc.text(`${item.unitPrice.toFixed(2)} SAR`, colX.unitPrice, y, { align: "center" });
-        doc.text(`${item.vatPercentage}%`, colX.vat, y, { align: "center" });
-        doc.text(`${item.amount.toFixed(2)} SAR`, colX.amount, y, { align: "center" });
+        doc.text(`${(item.unitPrice || 0).toFixed(2)} SAR`, colX.unitPrice, y, { align: "center" });
+        doc.text(`${item.vatPercentage || 0}%`, colX.vat, y, { align: "center" });
+        doc.text(`${(item.amount || 0).toFixed(2)} SAR`, colX.amount, y, { align: "center" });
   
         y += 7;
       });
@@ -333,7 +354,7 @@ export default function InvoicesPage() {
   
       doc.setFont("courier", "bold");
       doc.text("Total Amount:", 140, y);
-      doc.text(`${inv.totalAmount.toFixed(2)} SAR`, 200, y, { align: "right" });
+      doc.text(`${(inv.totalAmount || 0).toFixed(2)} SAR`, 200, y, { align: "right" });
   
       // Save
       doc.save(`${inv.invoiceType}_Invoice_${inv.id}.pdf`);
@@ -357,6 +378,16 @@ export default function InvoicesPage() {
   const openAddDialog = () => {
     resetForm()
     setIsDialogOpen(true)
+  }
+
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredInvoices.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
   }
 
   return (
@@ -417,14 +448,14 @@ export default function InvoicesPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredInvoices.length === 0 ? (
+                {currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No invoices found
                     </td>
                   </tr>
                 ) : (
-                  filteredInvoices.map((inv) => (
+                  currentItems.map((inv) => (
                     <tr key={inv.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {inv.id}
@@ -478,12 +509,12 @@ export default function InvoicesPage() {
               </tbody>
             </table>
             <div className="md:hidden divide-y divide-gray-200">
-              {filteredInvoices.length === 0 ? (
+              {currentItems.length === 0 ? (
                 <div className="p-6 text-center text-gray-500 text-sm">
                   No invoices found
                 </div>
               ) : (
-                filteredInvoices.map((inv) => (
+                currentItems.map((inv) => (
                   <div key={inv.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -527,6 +558,17 @@ export default function InvoicesPage() {
             </div>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredInvoices.length}
+          />
+        )}
 
         {isDialogOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">

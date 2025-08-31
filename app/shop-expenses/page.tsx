@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { shopExpensesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 
 interface ShopExpense {
   id: string
@@ -21,6 +22,9 @@ export default function ShopExpensesPage() {
   const [shopExpenses, setShopExpenses] = useState<ShopExpense[]>([])
   const [filteredShopExpenses, setFilteredShopExpenses] = useState<ShopExpense[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR'>("USD")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingShopExpense, setEditingShopExpense] = useState<ShopExpense | null>(null)
   const [loading, setLoading] = useState(false)
@@ -43,6 +47,10 @@ export default function ShopExpensesPage() {
   useEffect(() => {
     filterShopExpenses()
   }, [shopExpenses, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadShopExpenses = async () => {
     try {
@@ -157,6 +165,16 @@ export default function ShopExpensesPage() {
     setIsDialogOpen(true)
   }
 
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredShopExpenses.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredShopExpenses.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
   const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
     switch (currency) {
       case "USD": return "$"
@@ -164,6 +182,28 @@ export default function ShopExpensesPage() {
       case "SAR": return "ر.س"
       default: return ""
     }
+  }
+
+  const convertToDisplayCurrency = (amount: number, fromCurrency: 'USD' | 'PKR' | 'SAR') => {
+    // Simple conversion rates (you might want to use real-time rates in production)
+    const conversionRates = {
+      USD: { USD: 1, PKR: 280, SAR: 3.75 },
+      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013 },
+      SAR: { USD: 0.27, PKR: 75, SAR: 1 }
+    }
+    
+    return amount * conversionRates[fromCurrency][displayCurrency]
+  }
+
+  const getConvertedTotalAmount = () => {
+    return shopExpenses.reduce((sum, expense) => {
+      return sum + convertToDisplayCurrency(expense.amount, expense.currency)
+    }, 0)
+  }
+
+  const getConvertedAverageAmount = () => {
+    if (shopExpenses.length === 0) return 0
+    return getConvertedTotalAmount() / shopExpenses.length
   }
 
   const totalAmount = shopExpenses.reduce((sum, expense) => sum + expense.amount, 0)
@@ -194,15 +234,34 @@ export default function ShopExpensesPage() {
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Total Amount</p>
-              <p className="text-2xl font-bold text-red-600">${totalAmount.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-red-600">{getCurrencySymbol(displayCurrency)}{getConvertedTotalAmount().toFixed(2)}</p>
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Average Amount</p>
               <p className="text-2xl font-bold text-blue-600">
-                ${shopExpenses.length > 0 ? (totalAmount / shopExpenses.length).toFixed(2) : "0.00"}
+                {getCurrencySymbol(displayCurrency)}{getConvertedAverageAmount().toFixed(2)}
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Currency Selector */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Display Currency</h3>
+            <select
+              value={displayCurrency}
+              onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR')}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="USD">USD - Dollar</option>
+              <option value="PKR">PKR - Pakistani Rupee</option>
+              <option value="SAR">SAR - Saudi Riyal</option>
+            </select>
+          </div>
+          <p className="text-sm text-gray-500 mt-2">
+            All totals will be converted and displayed in the selected currency
+          </p>
         </div>
 
         <div className="bg-white rounded-lg shadow">
@@ -246,14 +305,14 @@ export default function ShopExpensesPage() {
                       Loading...
                     </td>
                   </tr>
-                ) : filteredShopExpenses.length === 0 ? (
+                ) : currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                       No shop expenses found
                     </td>
                   </tr>
                 ) : (
-                  filteredShopExpenses.map((expense) => (
+                  currentItems.map((expense) => (
                     <tr key={expense.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {expense.description}
@@ -290,6 +349,17 @@ export default function ShopExpensesPage() {
             </table>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredShopExpenses.length}
+          />
+        )}
 
         {/* Add/Edit Dialog */}
         {isDialogOpen && (

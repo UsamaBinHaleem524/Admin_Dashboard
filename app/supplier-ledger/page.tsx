@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { supplierTransactionsAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 
 interface Product {
   id: string
@@ -33,6 +34,8 @@ export default function SupplierLedgerPage() {
   const [filteredTransactions, setFilteredTransactions] = useState<SupplierTransaction[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<SupplierTransaction | null>(null)
   const [loading, setLoading] = useState(false)
@@ -60,6 +63,10 @@ export default function SupplierLedgerPage() {
   useEffect(() => {
     filterTransactions()
   }, [transactions, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadTransactions = async () => {
     try {
@@ -200,6 +207,16 @@ export default function SupplierLedgerPage() {
     setIsDialogOpen(true)
   }
 
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredTransactions.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
   const calculateRemainingAmount = () => {
     const total = Number.parseFloat(formData.totalAmount) || 0
     const given = Number.parseFloat(formData.givenAmount) || 0
@@ -282,14 +299,14 @@ export default function SupplierLedgerPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredTransactions.length === 0 ? (
+                {currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No transactions found
                     </td>
                   </tr>
                 ) : (
-                  filteredTransactions.map((transaction) => (
+                  currentItems.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {transaction.supplier}
@@ -346,6 +363,17 @@ export default function SupplierLedgerPage() {
             </table>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredTransactions.length}
+          />
+        )}
 
         {isDialogOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 !mt-0 flex items-center justify-center z-50 px-4 sm:px-0">

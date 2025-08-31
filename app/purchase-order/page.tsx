@@ -8,7 +8,9 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { purchaseOrdersAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 import jsPDF from "jspdf"
+import { getCompanyProfile, getDefaultCompanyProfile } from "@/lib/company-profile-utils"
 
 interface Product {
   id: string
@@ -37,6 +39,8 @@ export default function PurchaseOrdersPage() {
   const [filteredPurchaseOrders, setFilteredPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null)
   const [loading, setLoading] = useState(false)
@@ -61,6 +65,10 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     filterPurchaseOrders()
   }, [purchaseOrders, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadPurchaseOrders = async () => {
     try {
@@ -221,11 +229,14 @@ export default function PurchaseOrdersPage() {
     setDeleteModal({ isOpen: false, purchaseOrder: null })
   }
 
-  const handleDownloadPDF = (po: PurchaseOrder) => {
+  const handleDownloadPDF = async (po: PurchaseOrder) => {
     try {
       const doc = new jsPDF();
       const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
       const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Get company profile data
+      const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
 
       // Add logo
       doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
@@ -237,19 +248,19 @@ export default function PurchaseOrdersPage() {
 
       doc.setFontSize(14);
       doc.setFont("helvetica", "normal");
-      doc.text("Mehran Al Dahabi", pageWidth / 2, 40, { align: 'center' });
+      doc.text(companyProfile.name, pageWidth / 2, 40, { align: 'center' });
 
       doc.setFontSize(10);
-      doc.text("CR#: 591644739", 10, 50);
-      doc.text("businessemail@gmail.com", 10, 55);
+      doc.text(companyProfile.contact, 10, 50);
+      doc.text(companyProfile.email, 10, 55);
 
       // Vendor Details
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       doc.text("VENDOR", 10, 70);
       doc.setFont("helvetica", "normal");
-      doc.text("Faisal Ahmed", 10, 78);
-      doc.text("Jeddah, Saudi Arabia", 10, 85);
+      doc.text(po.supplier, 10, 78);
+      doc.text(companyProfile.address, 10, 85);
 
       // PO Details
       const rightX = pageWidth - 10;
@@ -285,10 +296,10 @@ export default function PurchaseOrdersPage() {
           y = 20;
         }
 
-        doc.text(item.itemName, colX.itemName, y);
-        doc.text(item.quantity.toString(), colX.quantity, y, { align: "center" });
-        doc.text(`${getCurrencySymbol(po.currency)}${item.unitPrice.toFixed(2)}`, colX.unitPrice, y, { align: "center" });
-        doc.text(`${getCurrencySymbol(po.currency)}${item.amount.toFixed(2)}`, colX.amount, y, { align: "center" });
+        doc.text(item.itemName || '', colX.itemName, y);
+        doc.text((item.quantity || 0).toString(), colX.quantity, y, { align: "center" });
+        doc.text(`${getCurrencySymbol(po.currency)}${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y, { align: "center" });
+        doc.text(`${getCurrencySymbol(po.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount, y, { align: "center" });
         y += 7;
       });
 
@@ -298,7 +309,7 @@ export default function PurchaseOrdersPage() {
       doc.line(10, y, 200, y); // underline before total
       y += 10;
       doc.text("Total", colX.unitPrice, y, { align: "center" });
-      doc.text(`${getCurrencySymbol(po.currency)}${po.totalAmount.toFixed(2)}`, colX.amount, y, { align: "center" });
+      doc.text(`${getCurrencySymbol(po.currency)}${(po.totalAmount || 0).toFixed(2)}`, colX.amount, y, { align: "center" });
 
       doc.save(`Purchase_Order_${po.id}.pdf`);
       showToast("PDF downloaded successfully!", "success");
@@ -321,6 +332,16 @@ export default function PurchaseOrdersPage() {
   const openAddDialog = () => {
     resetForm()
     setIsDialogOpen(true)
+  }
+
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredPurchaseOrders.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredPurchaseOrders.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
   }
 
   return (
@@ -381,14 +402,14 @@ export default function PurchaseOrdersPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPurchaseOrders.length === 0 ? (
+                {currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No purchase orders found
                     </td>
                   </tr>
                 ) : (
-                  filteredPurchaseOrders.map((po) => (
+                  currentItems.map((po) => (
                     <tr key={po.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {po.id}
@@ -442,12 +463,12 @@ export default function PurchaseOrdersPage() {
               </tbody>
             </table>
             <div className="md:hidden divide-y divide-gray-200">
-              {filteredPurchaseOrders.length === 0 ? (
+              {currentItems.length === 0 ? (
                 <div className="p-6 text-center text-gray-500 text-sm">
                   No purchase orders found
                 </div>
               ) : (
-                filteredPurchaseOrders.map((po) => (
+                currentItems.map((po) => (
                   <div key={po.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -491,6 +512,17 @@ export default function PurchaseOrdersPage() {
             </div>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredPurchaseOrders.length}
+          />
+        )}
 
         {isDialogOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">

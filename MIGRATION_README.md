@@ -69,7 +69,29 @@ import('/lib/migrate-data.js').then(() => {
 
 You can manually copy data from LocalStorage and insert it into MongoDB collections using the API endpoints.
 
-### 6. Authentication
+### 6. Sales and Purchases Field Migration
+
+After adding quantity, unit, and totalAmount fields to sales and purchases, you may need to migrate existing records:
+
+#### Browser Console Migration
+
+1. Open your application in the browser
+2. Open the browser console (F12)
+3. Run the field migration script:
+
+```javascript
+// Import the migration utility
+import('/lib/migrate-data.js').then(() => {
+  // Run the field migration
+  window.migrateSalesAndPurchasesFields().then(() => {
+    console.log('Field migration completed');
+  });
+});
+```
+
+This will add default values (quantity: 1, unit: 'yard', totalAmount: calculated from quantity × amount) to any existing sales and purchases records that don't have these fields.
+
+### 7. Authentication
 
 Authentication has been updated to use `sessionStorage` instead of `localStorage` for better security. The session will persist until the browser tab is closed.
 

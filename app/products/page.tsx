@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 
 interface Product {
   id: string
@@ -19,6 +20,8 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,6 +42,10 @@ export default function ProductsPage() {
   useEffect(() => {
     filterProducts()
   }, [products, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadProducts = async () => {
     try {
@@ -145,6 +152,16 @@ export default function ProductsPage() {
     setIsDialogOpen(true)
   }
 
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredProducts.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -197,14 +214,14 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredProducts.length === 0 ? (
+                {currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No products found
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map((product) => (
+                  currentItems.map((product) => (
                     <tr key={product.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {product.id}
@@ -238,12 +255,12 @@ export default function ProductsPage() {
             </table>
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-200">
-              {filteredProducts.length === 0 ? (
-                <div className="p-6 text-center text-gray-500 text-sm">
-                  No products found
-                </div>
-              ) : (
-                filteredProducts.map((product) => (
+                              {currentItems.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500 text-sm">
+                    No products found
+                  </div>
+                ) : (
+                  currentItems.map((product) => (
                   <div key={product.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -272,6 +289,17 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredProducts.length}
+          />
+        )}
 
         {/* Modal */}
         {isDialogOpen && (

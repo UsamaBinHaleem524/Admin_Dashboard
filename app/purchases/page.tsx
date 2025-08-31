@@ -7,12 +7,16 @@ import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { purchasesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
+import { Pagination } from "@/components/ui/pagination"
 
 interface Purchase {
   id: string
   supplier: string
   description: string
+  quantity: number
+  unit: 'yard' | 'meter'
   amount: number
+  totalAmount: number
   date: string
 }
 
@@ -20,6 +24,8 @@ export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null)
   const [loading, setLoading] = useState(false)
@@ -30,7 +36,10 @@ export default function PurchasesPage() {
   const [formData, setFormData] = useState({
     supplier: "",
     description: "",
+    quantity: "1",
+    unit: "yard" as 'yard' | 'meter',
     amount: "",
+    totalAmount: "0",
     date: "",
   })
   const { showToast } = useToast()
@@ -42,6 +51,10 @@ export default function PurchasesPage() {
   useEffect(() => {
     filterPurchases()
   }, [purchases, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   const loadPurchases = async () => {
     try {
@@ -77,16 +90,23 @@ export default function PurchasesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.supplier || !formData.description || !formData.amount || !formData.date) {
+    if (!formData.supplier || !formData.description || !formData.quantity || !formData.unit || !formData.amount || !formData.date) {
       showToast("Please fill in all fields", "error")
       return
     }
+
+    const quantity = Number.parseFloat(formData.quantity)
+    const amount = Number.parseFloat(formData.amount)
+    const totalAmount = quantity * amount
 
     const purchaseData: Purchase = {
       id: editingPurchase ? editingPurchase.id : Date.now().toString(),
       supplier: formData.supplier,
       description: formData.description,
-      amount: Number.parseFloat(formData.amount),
+      quantity: quantity,
+      unit: formData.unit,
+      amount: amount,
+      totalAmount: totalAmount,
       date: formData.date,
     }
 
@@ -113,7 +133,10 @@ export default function PurchasesPage() {
     setFormData({
       supplier: purchase.supplier,
       description: purchase.description,
-      amount: purchase.amount.toString(),
+      quantity: (purchase.quantity || 1).toString(),
+      unit: purchase.unit || 'yard',
+      amount: (purchase.amount || 0).toString(),
+      totalAmount: (purchase.totalAmount || (purchase.quantity || 1) * (purchase.amount || 0)).toString(),
       date: purchase.date,
     })
     setIsDialogOpen(true)
@@ -139,13 +162,29 @@ export default function PurchasesPage() {
   }
 
   const resetForm = () => {
-    setFormData({ supplier: "", description: "", amount: "", date: "" })
+    setFormData({ supplier: "", description: "", quantity: "1", unit: "yard", amount: "", totalAmount: "0", date: "" })
     setEditingPurchase(null)
+  }
+
+  const calculateTotalAmount = () => {
+    const quantity = Number.parseFloat(formData.quantity) || 0
+    const amount = Number.parseFloat(formData.amount) || 0
+    return (quantity * amount).toFixed(2)
   }
 
   const openAddDialog = () => {
     resetForm()
     setIsDialogOpen(true)
+  }
+
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentItems = filteredPurchases.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
   }
 
   return (
@@ -192,7 +231,16 @@ export default function PurchasesPage() {
                     Description
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
+                    Quantity
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Unit
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Unit Price
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Amount
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
@@ -203,14 +251,14 @@ export default function PurchasesPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPurchases.length === 0 ? (
+                {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={8} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No purchase records found
                     </td>
                   </tr>
                 ) : (
-                  filteredPurchases.map((purchase) => (
+                  currentItems.map((purchase) => (
                     <tr key={purchase.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {purchase.supplier}
@@ -219,7 +267,16 @@ export default function PurchasesPage() {
                         {purchase.description}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${purchase.amount.toFixed(2)}
+                        {purchase.quantity || 1}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {purchase.unit || 'yard'}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        ${(purchase.amount || 0).toFixed(2)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        ${(purchase.totalAmount || purchase.quantity * purchase.amount || 0).toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {purchase.date}
@@ -247,6 +304,17 @@ export default function PurchasesPage() {
             </table>
           </div>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredPurchases.length}
+          />
+        )}
 
         {/* Modal */}
         {isDialogOpen && (
@@ -282,9 +350,39 @@ export default function PurchasesPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity
+                    </label>
+                    <input
+                      id="quantity"
+                      type="number"
+                      step="0.01"
+                      value={formData.quantity}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                      placeholder="Enter quantity"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-1">
+                      Unit
+                    </label>
+                    <select
+                      id="unit"
+                      value={formData.unit}
+                      onChange={(e) => setFormData({ ...formData, unit: e.target.value as 'yard' | 'meter' })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    >
+                      <option value="yard">Yard</option>
+                      <option value="meter">Meter</option>
+                    </select>
+                  </div>
+                </div>
                 <div>
                   <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount
+                    Unit Price
                   </label>
                   <input
                     id="amount"
@@ -292,8 +390,20 @@ export default function PurchasesPage() {
                     step="0.01"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="Enter amount"
+                    placeholder="Enter unit price"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Amount
+                  </label>
+                  <input
+                    id="totalAmount"
+                    type="text"
+                    value={`$${calculateTotalAmount()}`}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
                   />
                 </div>
                 <div>
