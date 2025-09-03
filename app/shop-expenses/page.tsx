@@ -14,7 +14,10 @@ interface ShopExpense {
   id: string
   description: string
   date: string
-  amount: number
+  previousAmount: number
+  income: number
+  outgoingAmount: number
+  totalCash: number
   currency: "USD" | "PKR" | "SAR"
 }
 
@@ -35,7 +38,9 @@ export default function ShopExpensesPage() {
   const [formData, setFormData] = useState({
     description: "",
     date: new Date().toISOString().split('T')[0],
-    amount: "",
+    previousAmount: "",
+    income: "",
+    outgoingAmount: "",
     currency: "USD" as "USD" | "PKR" | "SAR",
   })
   const { showToast } = useToast()
@@ -73,7 +78,6 @@ export default function ShopExpensesPage() {
         (expense) =>
           expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
           expense.date.includes(searchTerm) ||
-          expense.amount.toString().includes(searchTerm) ||
           expense.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
       setFilteredShopExpenses(filtered)
@@ -83,22 +87,23 @@ export default function ShopExpensesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.description || !formData.date || !formData.amount || !formData.currency) {
-      showToast("Please fill in all fields", "error")
+    if (!formData.description || !formData.date || !formData.currency) {
+      showToast("Please fill in all required fields", "error")
       return
     }
 
-    const amount = Number.parseFloat(formData.amount)
-    if (isNaN(amount) || amount < 0) {
-      showToast("Please enter a valid amount", "error")
-      return
-    }
+    const previousAmount = Number.parseFloat(formData.previousAmount) || 0
+    const income = Number.parseFloat(formData.income) || 0
+    const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
 
     const shopExpenseData: ShopExpense = {
       id: editingShopExpense ? editingShopExpense.id : Date.now().toString(),
       description: formData.description,
       date: formData.date,
-      amount,
+      previousAmount,
+      income,
+      outgoingAmount,
+      totalCash: (previousAmount + income) - outgoingAmount,
       currency: formData.currency,
     }
 
@@ -125,7 +130,9 @@ export default function ShopExpensesPage() {
     setFormData({
       description: shopExpense.description,
       date: shopExpense.date,
-      amount: shopExpense.amount.toString(),
+      previousAmount: (shopExpense.previousAmount || 0).toString(),
+      income: (shopExpense.income || 0).toString(),
+      outgoingAmount: (shopExpense.outgoingAmount || 0).toString(),
       currency: shopExpense.currency || "USD",
     })
     setIsDialogOpen(true)
@@ -154,7 +161,9 @@ export default function ShopExpensesPage() {
     setFormData({
       description: "",
       date: new Date().toISOString().split('T')[0],
-      amount: "",
+      previousAmount: "",
+      income: "",
+      outgoingAmount: "",
       currency: "USD",
     })
     setEditingShopExpense(null)
@@ -195,18 +204,31 @@ export default function ShopExpensesPage() {
     return amount * conversionRates[fromCurrency][displayCurrency]
   }
 
-  const getConvertedTotalAmount = () => {
+  // Calculate totals
+  const getTotalIncome = () => {
     return shopExpenses.reduce((sum, expense) => {
-      return sum + convertToDisplayCurrency(expense.amount, expense.currency)
+      return sum + convertToDisplayCurrency(expense.income, expense.currency)
     }, 0)
   }
 
-  const getConvertedAverageAmount = () => {
-    if (shopExpenses.length === 0) return 0
-    return getConvertedTotalAmount() / shopExpenses.length
+  const getTotalOutgoing = () => {
+    return shopExpenses.reduce((sum, expense) => {
+      return sum + convertToDisplayCurrency(expense.outgoingAmount, expense.currency)
+    }, 0)
   }
 
-  const totalAmount = shopExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+  const getTotalCash = () => {
+    return shopExpenses.reduce((sum, expense) => {
+      return sum + convertToDisplayCurrency(expense.totalCash, expense.currency)
+    }, 0)
+  }
+
+  const calculateTotalCash = () => {
+    const previousAmount = Number.parseFloat(formData.previousAmount) || 0
+    const income = Number.parseFloat(formData.income) || 0
+    const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
+    return (previousAmount + income) - outgoingAmount
+  }
 
   return (
     <DashboardLayout>
@@ -214,7 +236,7 @@ export default function ShopExpensesPage() {
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Shop Expenses</h1>
-            <p className="text-sm sm:text-base text-gray-600">Manage shop expenses</p>
+            <p className="text-sm sm:text-base text-gray-600">Manage shop expenses and cash flow</p>
           </div>
           <button
             onClick={openAddDialog}
@@ -225,21 +247,32 @@ export default function ShopExpensesPage() {
           </button>
         </div>
 
-        {/* Summary Card */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-lg shadow p-6">
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Total Expenses</p>
-              <p className="text-2xl font-bold text-gray-900">{shopExpenses.length}</p>
+              <p className="text-sm font-medium text-gray-600">Total Income</p>
+              <p className="text-2xl font-bold text-green-600">
+                {getCurrencySymbol(displayCurrency)}{getTotalIncome().toFixed(2)}
+              </p>
             </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Total Amount</p>
-              <p className="text-2xl font-bold text-red-600">{getCurrencySymbol(displayCurrency)}{getConvertedTotalAmount().toFixed(2)}</p>
+              <p className="text-sm font-medium text-gray-600">Total Outgoing</p>
+              <p className="text-2xl font-bold text-red-600">
+                {getCurrencySymbol(displayCurrency)}{getTotalOutgoing().toFixed(2)}
+              </p>
             </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Average Amount</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {getCurrencySymbol(displayCurrency)}{getConvertedAverageAmount().toFixed(2)}
+              <p className="text-sm font-medium text-gray-600">Total Cash</p>
+              <p className={cn(
+                "text-2xl font-bold",
+                getTotalCash() >= 0 ? "text-blue-600" : "text-red-600"
+              )}>
+                {getCurrencySymbol(displayCurrency)}{getTotalCash().toFixed(2)}
               </p>
             </div>
           </div>
@@ -270,7 +303,7 @@ export default function ShopExpensesPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by description, date, amount, or currency..."
+                placeholder="Search by description, date, or currency..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -278,17 +311,26 @@ export default function ShopExpensesPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
+                    Description
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Previous Amount
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Income
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Outgoing Amount
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Cash
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Currency
@@ -301,27 +343,39 @@ export default function ShopExpensesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                       Loading...
                     </td>
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                       No shop expenses found
                     </td>
                   </tr>
                 ) : (
                   currentItems.map((expense) => (
                     <tr key={expense.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {expense.description}
-                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {expense.date}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                        {getCurrencySymbol(expense.currency)}{expense.amount.toFixed(2)}
+                      <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900">
+                        {expense.description}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {getCurrencySymbol(expense.currency)}{(expense.previousAmount || 0).toFixed(2)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                        {getCurrencySymbol(expense.currency)}{(expense.income || 0).toFixed(2)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-red-600 font-medium">
+                        {getCurrencySymbol(expense.currency)}{(expense.outgoingAmount || 0).toFixed(2)}
+                      </td>
+                      <td className={cn(
+                        "px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium",
+                        (expense.totalCash || 0) >= 0 ? "text-blue-600" : "text-red-600"
+                      )}>
+                        {getCurrencySymbol(expense.currency)}{(expense.totalCash || 0).toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {expense.currency}
@@ -371,7 +425,19 @@ export default function ShopExpensesPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description *
                   </label>
                   <input
                     type="text"
@@ -384,34 +450,60 @@ export default function ShopExpensesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount
+                    Previous Amount
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                    value={formData.previousAmount}
+                    onChange={(e) => setFormData({ ...formData, previousAmount: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
-                    required
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Currency
+                    Income
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.income}
+                    onChange={(e) => setFormData({ ...formData, income: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Outgoing Amount
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.outgoingAmount}
+                    onChange={(e) => setFormData({ ...formData, outgoingAmount: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Cash (Calculated)
+                  </label>
+                  <input
+                    type="text"
+                    value={`${getCurrencySymbol(formData.currency)}${calculateTotalCash().toFixed(2)}`}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency *
                   </label>
                   <select
                     value={formData.currency}
@@ -450,9 +542,8 @@ export default function ShopExpensesPage() {
           onConfirm={() => deleteModal.expense && handleDelete(deleteModal.expense.id)}
           title="Delete Shop Expense"
           message="Are you sure you want to delete this shop expense? This action cannot be undone."
-          itemName={deleteModal.expense?.description}
         />
       </div>
     </DashboardLayout>
   )
-} 
+}

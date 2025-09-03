@@ -30,6 +30,7 @@ interface InvoiceItem {
 
 interface Invoice {
   id: string
+  userDefinedId: string
   date: string
   invoiceType: "Simple" | "Proforma"
   items: InvoiceItem[]
@@ -52,6 +53,7 @@ export default function InvoicesPage() {
     invoice: null,
   })
   const [formData, setFormData] = useState({
+    userDefinedId: "",
     date: new Date().toISOString().split('T')[0],
     invoiceType: "Simple" as "Simple" | "Proforma",
     items: [{ itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
@@ -105,7 +107,7 @@ export default function InvoicesPage() {
     } else {
       const filtered = invoices.filter(
         (inv) =>
-          inv.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          inv.userDefinedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.invoiceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.items.some(item => 
@@ -163,6 +165,11 @@ export default function InvoicesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!formData.userDefinedId) {
+      showToast("Please enter an Invoice ID", "error")
+      return
+    }
+
     if (formData.items.some(item => !item.itemName || !item.description || !item.quantity || !item.unit || !item.unitPrice || !item.vatPercentage)) {
       showToast("Please fill in all required fields for all items", "error")
       return
@@ -174,10 +181,10 @@ export default function InvoicesPage() {
     }
 
     const totalAmount = Number.parseFloat(calculateTotalAmount())
-    const invId = editingInvoice ? editingInvoice.id : `INV-${Date.now().toString().slice(-6)}`
 
     const invoiceData: Invoice = {
-      id: invId,
+      id: editingInvoice ? editingInvoice.id : "",
+      userDefinedId: formData.userDefinedId,
       date: formData.date,
       invoiceType: formData.invoiceType,
       items: formData.items.map(item => ({
@@ -214,6 +221,7 @@ export default function InvoicesPage() {
   const handleEdit = (invoice: Invoice) => {
     setEditingInvoice(invoice)
     setFormData({
+      userDefinedId: invoice.userDefinedId,
       date: invoice.date,
       invoiceType: invoice.invoiceType,
       items: invoice.items.map(item => ({
@@ -253,111 +261,163 @@ export default function InvoicesPage() {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
   
       // Get company profile data
       const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
   
-      // Logo (top-left corner)
-      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-      doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
-  
-      // Header - INVOICE title
-      doc.setFontSize(20);
-      doc.setFont("helvetica", "bold");
-      doc.text(`${inv.invoiceType.toUpperCase()} INVOICE`, pageWidth / 2, 30, { align: "center" });
-  
-      // Company information
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "normal");
-      doc.text(companyProfile.name, pageWidth / 2, 40, { align: "center" });
-  
-      doc.setFontSize(10);
-      doc.text(companyProfile.contact, 10, 50);
-      doc.text(companyProfile.email, 10, 55);
-      doc.text(companyProfile.address, 10, 60);
-  
-      // Invoice details
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Invoice ID: ${inv.id}`, 10, 70);
-      doc.text(`Date: ${inv.date}`, 10, 77);
-  
-      // Table headers
-      let y = 85;
-      doc.setFontSize(12);
-      doc.setFont("courier", "bold");
-  
-      const colX = {
-        index: 10,
-        itemName: 20,
-        description: 50,
-        quantity: 115,
-        unitPrice: 140,
-        vat: 160,
-        amount: 180,
-      };
-  
-      doc.text("No.", colX.index, y);
-      doc.text("Item Name", colX.itemName, y);
-      doc.text("Description", colX.description, y);
-      doc.text("Qty", colX.quantity, y, { align: "center" });
-      doc.text("Price", colX.unitPrice, y, { align: "center" });
-      doc.text("VAT%", colX.vat, y, { align: "center" });
-      doc.text("Amount", colX.amount, y, { align: "center" });
-  
-      y += 6;
-      doc.setLineWidth(0.2);
-      doc.line(10, y, 200, y); // underline header
-      y += 4;
-  
-      // Table rows
-      doc.setFont("courier", "normal");
-      inv.items.forEach((item, index) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-  
-          // Repeat table header on new page
-          doc.setFont("courier", "bold");
-          doc.text("No.", colX.index, y);
-          doc.text("Item Name", colX.itemName, y);
-          doc.text("Description", colX.description, y);
-          doc.text("Qty", colX.quantity, y, { align: "center" });
-          doc.text("Price", colX.unitPrice, y, { align: "center" });
-          doc.text("VAT%", colX.vat, y, { align: "center" });
-          doc.text("Amount", colX.amount, y, { align: "center" });
-          y += 10;
-          doc.setFont("courier", "normal");
-        }
-  
-        doc.text(`${index + 1}`, colX.index, y);
-        doc.text(item.itemName, colX.itemName, y);
-        doc.text(item.description, colX.description, y);
-        doc.text(item.quantity.toString(), colX.quantity, y, { align: "center" });
-        doc.text(`${(item.unitPrice || 0).toFixed(2)} SAR`, colX.unitPrice, y, { align: "center" });
-        doc.text(`${item.vatPercentage || 0}%`, colX.vat, y, { align: "center" });
-        doc.text(`${(item.amount || 0).toFixed(2)} SAR`, colX.amount, y, { align: "center" });
-  
-        y += 7;
-      });
-  
-      // Total
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
+      // Logo (top-left corner) - larger size like in the reference
+      try {
+        const logoResponse = await fetch('/logo.jpeg');
+        const logoBlob = await logoResponse.blob();
+        const logoBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(logoBlob);
+        });
+        doc.addImage(logoBase64 as string, 'JPEG', 15, 15, 35, 35);
+      } catch (error) {
+        // Fallback to placeholder if logo fails to load
+        const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        doc.addImage(imgData, 'PNG', 15, 15, 35, 35);
       }
   
-      y += 3;
-      doc.setLineWidth(0.2);
-      doc.line(10, y, 200, y); // underline before total
-      y += 10;
+            // Invoice Header Section (Right side)
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text(inv.userDefinedId || 'INVOICE', pageWidth - 25, 25, { align: "right" });
+
+      // Invoice details (right side)
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Invoice Date: ${inv.date}`, pageWidth - 25, 35, { align: "right" });
   
-      doc.setFont("courier", "bold");
-      doc.text("Total Amount:", 140, y);
-      doc.text(`${(inv.totalAmount || 0).toFixed(2)} SAR`, 200, y, { align: "right" });
+      // Sender Information (Left side - Company details)
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyProfile.name || 'Company Name', 15, 60);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(companyProfile.contact || 'Contact Person', 15, 70);
+      doc.text(companyProfile.address || 'Company Address', 15, 77);
+      doc.text(companyProfile.email || 'Phone Number', 15, 84);
+  
+      // Receiver Information (Right side)
+      const receiverY = 60;
+      doc.setFontSize(12);
+  
+      // Table Section
+      let y = 110;
+      
+      // Table headers with professional styling
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      
+      const colX = {
+        rowNo: 15,
+        description: 35,
+        date: 85,
+        qty: 105,
+        unit: 125,
+        unitPrice: 145,
+        vat: 165,
+        total: 185,
+      };
+  
+      // Header row with background
+      doc.setFillColor(240, 240, 240);
+      doc.rect(10, y - 5, pageWidth - 20, 12, 'F');
+      
+      doc.text("Row no.", colX.rowNo, y);
+      doc.text("Description", colX.description, y);
+      doc.text("Date", colX.date, y);
+      doc.text("Qty", colX.qty, y);
+      doc.text("Unit", colX.unit, y);
+      doc.text("Unit price", colX.unitPrice, y);
+      doc.text("VAT %", colX.vat, y);
+      doc.text("Total", colX.total, y);
+  
+      y += 8;
+  
+      // Table rows
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      
+      let subtotal = 0;
+      let totalVAT = 0;
+      
+                   inv.items.forEach((item, index) => {
+               if (y > pageHeight - 80) {
+                 doc.addPage();
+                 y = 20;
+
+                 // Repeat header on new page
+                 doc.setFontSize(11);
+                 doc.setFont("helvetica", "bold");
+                 doc.setFillColor(240, 240, 240);
+                 doc.rect(10, y - 5, pageWidth - 20, 12, 'F');
+
+                 doc.text("Row no.", colX.rowNo, y);
+                 doc.text("Description", colX.description, y);
+                 doc.text("Date", colX.date, y);
+                 doc.text("Qty", colX.qty, y);
+                 doc.text("Unit", colX.unit, y);
+                 doc.text("Unit price", colX.unitPrice, y);
+                 doc.text("VAT %", colX.vat, y);
+                 doc.text("Total", colX.total, y);
+                 y += 8;
+                 doc.setFontSize(9);
+                 doc.setFont("helvetica", "normal");
+               }
+
+               const itemTotal = item.amount || 0;
+               const itemVAT = (itemTotal * (item.vatPercentage || 0)) / 100;
+               // Calculate subtotal as the amount before VAT
+               const itemSubtotal = itemTotal - itemVAT;
+               subtotal += itemSubtotal;
+               totalVAT += itemVAT;
+  
+                 doc.text(`${index + 1}`, colX.rowNo, y);
+         doc.text(item.itemName || '', colX.description, y);
+         doc.text(inv.date || '', colX.date, y);
+         doc.text((item.quantity || 0).toString(), colX.qty, y);
+         doc.text(item.unit || '', colX.unit, y);
+         doc.text(`US$${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y);
+         doc.text(`${(item.vatPercentage || 0).toFixed(2)}%`, colX.vat, y);
+         doc.text(`US$${itemTotal.toFixed(2)}`, colX.total, y);
+  
+        y += 6;
+      });
+  
+      // Summary Section (Right side) - Fixed layout
+      const summaryX = pageWidth - 80;
+      const summaryY = y + 10;
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      
+      doc.text("Subtotal:", summaryX, summaryY);
+      doc.text("Total excl. VAT:", summaryX, summaryY + 8);
+      doc.text("VAT Amount:", summaryX, summaryY + 16);
+      doc.text("Total amount due:", summaryX, summaryY + 24);
+      
+      doc.setFont("helvetica", "normal");
+      const finalTotal = inv.totalAmount || (subtotal + totalVAT);
+      doc.text(`US$${subtotal.toFixed(2)}`, summaryX + 50, summaryY, { align: "right" });
+      doc.text(`US$${subtotal.toFixed(2)}`, summaryX + 50, summaryY + 8, { align: "right" });
+      doc.text(`US$${totalVAT.toFixed(2)}`, summaryX + 50, summaryY + 16, { align: "right" });
+      doc.text(`US$${finalTotal.toFixed(2)}`, summaryX + 50, summaryY + 24, { align: "right" });
+  
+      // Footer
+      const footerY = pageHeight - 20;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(companyProfile.name || 'Company Name', 15, footerY);
+      doc.text(companyProfile.address || 'Company Address', 15, footerY + 6);
   
       // Save
-      doc.save(`${inv.invoiceType}_Invoice_${inv.id}.pdf`);
+      doc.save(`Invoice_${inv.userDefinedId}.pdf`);
       showToast("PDF downloaded successfully!", "success");
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -367,6 +427,7 @@ export default function InvoicesPage() {
 
   const resetForm = () => {
     setFormData({
+      userDefinedId: "",
       date: new Date().toISOString().split('T')[0],
       invoiceType: "Simple" as "Simple" | "Proforma",
       items: [{ itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
@@ -458,7 +519,7 @@ export default function InvoicesPage() {
                   currentItems.map((inv) => (
                     <tr key={inv.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
-                        {inv.id}
+                        {inv.userDefinedId}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {inv.invoiceType}
@@ -577,6 +638,26 @@ export default function InvoicesPage() {
                 {editingInvoice ? "Edit Invoice" : "Add New Invoice"}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="userDefinedId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Invoice ID
+                  </label>
+                  <input
+                    id="userDefinedId"
+                    type="text"
+                    value={formData.userDefinedId}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      // Auto-add INV- prefix if not present
+                      if (value && !value.startsWith('INV-')) {
+                        value = 'INV-' + value.replace(/^INV-/, '');
+                      }
+                      setFormData({ ...formData, userDefinedId: value });
+                    }}
+                    placeholder="Enter invoice ID (INV- will be added automatically)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
                 <div>
                   <label htmlFor="invoiceType" className="block text-sm font-medium text-gray-700 mb-1">
                     Invoice Type

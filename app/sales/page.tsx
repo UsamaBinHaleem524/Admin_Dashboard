@@ -9,15 +9,12 @@ import { salesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
 
-
 interface Sale {
   id: string
   customer: string
   description: string
-  quantity: number
-  unit: 'yard' | 'meter'
   amount: number
-  totalAmount: number
+  currency: "USD" | "PKR" | "SAR"
   date: string
 }
 
@@ -34,14 +31,13 @@ export default function SalesPage() {
     isOpen: false,
     sale: null,
   })
+  const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "PKR" | "SAR">("USD")
   const [formData, setFormData] = useState({
     customer: "",
     description: "",
-    quantity: "1",
-    unit: "yard" as 'yard' | 'meter',
     amount: "",
-    totalAmount: "0",
-    date: "",
+    currency: "USD" as "USD" | "PKR" | "SAR",
+    date: new Date().toISOString().split('T')[0],
   })
   const { showToast } = useToast()
 
@@ -70,10 +66,6 @@ export default function SalesPage() {
     }
   }
 
-  const saveSales = async (newSales: Sale[]) => {
-    setSales(newSales)
-  }
-
   const filterSales = () => {
     if (!searchTerm) {
       setFilteredSales(sales)
@@ -91,23 +83,19 @@ export default function SalesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.customer || !formData.description || !formData.quantity || !formData.unit || !formData.amount || !formData.date) {
-      showToast("Please fill in all fields", "error")
+    if (!formData.customer || !formData.description || !formData.amount || !formData.date || !formData.currency) {
+      showToast("Please fill in all required fields", "error")
       return
     }
 
-    const quantity = Number.parseFloat(formData.quantity)
-    const amount = Number.parseFloat(formData.amount)
-    const totalAmount = quantity * amount
+    const amount = Number.parseFloat(formData.amount) || 0
 
     const saleData: Sale = {
       id: editingSale ? editingSale.id : Date.now().toString(),
       customer: formData.customer,
       description: formData.description,
-      quantity: quantity,
-      unit: formData.unit,
       amount: amount,
-      totalAmount: totalAmount,
+      currency: formData.currency,
       date: formData.date,
     }
 
@@ -134,10 +122,8 @@ export default function SalesPage() {
     setFormData({
       customer: sale.customer,
       description: sale.description,
-      quantity: (sale.quantity || 1).toString(),
-      unit: sale.unit || 'yard',
       amount: (sale.amount || 0).toString(),
-      totalAmount: (sale.totalAmount || (sale.quantity || 1) * (sale.amount || 0)).toString(),
+      currency: sale.currency || "USD",
       date: sale.date,
     })
     setIsDialogOpen(true)
@@ -163,19 +149,52 @@ export default function SalesPage() {
   }
 
   const resetForm = () => {
-    setFormData({ customer: "", description: "", quantity: "1", unit: "yard", amount: "", totalAmount: "0", date: "" })
+    setFormData({
+      customer: "",
+      description: "",
+      amount: "",
+      currency: "USD",
+      date: new Date().toISOString().split('T')[0],
+    })
     setEditingSale(null)
-  }
-
-  const calculateTotalAmount = () => {
-    const quantity = Number.parseFloat(formData.quantity) || 0
-    const amount = Number.parseFloat(formData.amount) || 0
-    return (quantity * amount).toFixed(2)
   }
 
   const openAddDialog = () => {
     resetForm()
     setIsDialogOpen(true)
+  }
+
+  // Currency conversion rates (you can update these with real-time rates)
+  const conversionRates = {
+    USD: 1,
+    PKR: 280, // 1 USD = 280 PKR (approximate)
+    SAR: 3.75, // 1 USD = 3.75 SAR (approximate)
+  }
+
+  const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string) => {
+    if (fromCurrency === toCurrency) return amount
+    
+    // Convert to USD first, then to target currency
+    const usdAmount = amount / conversionRates[fromCurrency as keyof typeof conversionRates]
+    return usdAmount * conversionRates[toCurrency as keyof typeof conversionRates]
+  }
+
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+    switch (currency) {
+      case "USD": return "$"
+      case "PKR": return "₨"
+      case "SAR": return "ر.س"
+      default: return ""
+    }
+  }
+
+  const getTotalAmountInSelectedCurrency = () => {
+    const totalUSD = sales.reduce((sum, sale) => {
+      const usdAmount = convertCurrency(sale.amount, sale.currency, "USD")
+      return sum + usdAmount
+    }, 0)
+    
+    return convertCurrency(totalUSD, "USD", selectedCurrency)
   }
 
   // Pagination logic
@@ -206,6 +225,33 @@ export default function SalesPage() {
           </button>
         </div>
 
+        {/* Currency Selector and Total */}
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Total Sales Amount</h3>
+              <p className="text-2xl font-bold text-blue-600">
+                {getCurrencySymbol(selectedCurrency)}{getTotalAmountInSelectedCurrency().toFixed(2)}
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <label htmlFor="currency-selector" className="text-sm font-medium text-gray-700">
+                Display Currency:
+              </label>
+              <select
+                id="currency-selector"
+                value={selectedCurrency}
+                onChange={(e) => setSelectedCurrency(e.target.value as "USD" | "PKR" | "SAR")}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="USD">Dollar (USD)</option>
+                <option value="PKR">Pakistani Rupee (PKR)</option>
+                <option value="SAR">Saudi Riyal (SAR)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
@@ -217,7 +263,7 @@ export default function SalesPage() {
                 placeholder="Search by customer, description, or date..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="sm:max-w-[32%]  flex-1  px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
               />
             </div>
           </div>
@@ -226,25 +272,19 @@ export default function SalesPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Customer
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quantity
+                    Amount
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit Price
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Amount
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
+                    Currency
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -254,31 +294,27 @@ export default function SalesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No sales records found
                     </td>
                   </tr>
                 ) : (
                   currentItems.map((sale) => (
                     <tr key={sale.id} className="hover:bg-gray-50">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {sale.date}
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {sale.customer}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">{sale.description}</td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {sale.quantity || 1}
+                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
+                        {sale.description}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {sale.unit || 'yard'}
+                        {getCurrencySymbol(sale.currency)}{(sale.amount || 0).toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${(sale.amount || 0).toFixed(2)}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        ${(sale.totalAmount || sale.quantity * sale.amount || 0).toFixed(2)}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {sale.date}
+                        {sale.currency}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
@@ -324,8 +360,20 @@ export default function SalesPage() {
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
+                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date *
+                  </label>
+                  <input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  />
+                </div>
+                <div>
                   <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer
+                    Customer *
                   </label>
                   <input
                     id="customer"
@@ -338,7 +386,7 @@ export default function SalesPage() {
                 </div>
                 <div>
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
+                    Description *
                   </label>
                   <input
                     id="description"
@@ -349,39 +397,9 @@ export default function SalesPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
-                      Quantity
-                    </label>
-                    <input
-                      id="quantity"
-                      type="number"
-                      step="0.01"
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                      placeholder="Enter quantity"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-1">
-                      Unit
-                    </label>
-                    <select
-                      id="unit"
-                      value={formData.unit}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value as 'yard' | 'meter' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                    >
-                      <option value="yard">Yard</option>
-                      <option value="meter">Meter</option>
-                    </select>
-                  </div>
-                </div>
                 <div>
                   <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit Price
+                    Amount *
                   </label>
                   <input
                     id="amount"
@@ -389,33 +407,24 @@ export default function SalesPage() {
                     step="0.01"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="Enter unit price"
+                    placeholder="Enter amount"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   />
                 </div>
                 <div>
-                  <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Amount
+                  <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency *
                   </label>
-                  <input
-                    id="totalAmount"
-                    type="text"
-                    value={`$${calculateTotalAmount()}`}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                    Date
-                  </label>
-                  <input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  <select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
+                  >
+                    <option value="USD">Dollar (USD)</option>
+                    <option value="PKR">Pakistani Rupee (PKR)</option>
+                    <option value="SAR">Saudi Riyal (SAR)</option>
+                  </select>
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
                   <button
@@ -444,7 +453,6 @@ export default function SalesPage() {
           onConfirm={() => deleteModal.sale && handleDelete(deleteModal.sale.id)}
           title="Delete Sale"
           message="Are you sure you want to delete this sale? This action cannot be undone."
-          itemName={`${deleteModal.sale?.customer} - ${deleteModal.sale?.description}`}
         />
       </div>
     </DashboardLayout>

@@ -26,6 +26,7 @@ interface QuotationItem {
 
 interface Quotation {
   id: string
+  userDefinedId: string
   date: string
   items: QuotationItem[]
   totalAmount: number
@@ -47,6 +48,7 @@ export default function QuotationsPage() {
     quotation: null,
   })
   const [formData, setFormData] = useState({
+    userDefinedId: "",
     date: new Date().toISOString().split('T')[0],
     items: [{ itemName: "", description: "", amount: "" }],
     currency: "USD" as "USD" | "PKR" | "SAR",
@@ -99,7 +101,7 @@ export default function QuotationsPage() {
     } else {
       const filtered = quotations.filter(
         (q) =>
-          q.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          q.userDefinedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           q.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
           q.items.some(item => 
             item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -146,6 +148,11 @@ export default function QuotationsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!formData.userDefinedId) {
+      showToast("Please enter a Quotation ID", "error")
+      return
+    }
+
     if (formData.items.some(item => !item.itemName || !item.description || !item.amount)) {
       showToast("Please fill in all required fields for all items", "error")
       return
@@ -157,10 +164,10 @@ export default function QuotationsPage() {
     }
 
     const totalAmount = Number.parseFloat(calculateTotalAmount())
-    const qId = editingQuotation ? editingQuotation.id : `Q-${Date.now().toString().slice(-6)}`
 
     const quotationData: Quotation = {
-      id: qId,
+      id: editingQuotation ? editingQuotation.id : "",
+      userDefinedId: formData.userDefinedId,
       date: formData.date,
       items: formData.items.map(item => ({
         itemName: item.itemName,
@@ -192,6 +199,7 @@ export default function QuotationsPage() {
   const handleEdit = (quotation: Quotation) => {
     setEditingQuotation(quotation)
     setFormData({
+      userDefinedId: quotation.userDefinedId,
       date: quotation.date,
       items: quotation.items.map(item => ({
         itemName: item.itemName,
@@ -230,8 +238,20 @@ export default function QuotationsPage() {
       const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
   
       // Logo (top-left corner)
-      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-      doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
+      try {
+        const logoResponse = await fetch('/logo.jpeg');
+        const logoBlob = await logoResponse.blob();
+        const logoBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(logoBlob);
+        });
+        doc.addImage(logoBase64 as string, 'JPEG', 10, 10, 40, 30);
+      } catch (error) {
+        // Fallback to placeholder if logo fails to load
+        const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
+      }
   
       // Header - QUOTATION title
       doc.setFontSize(20);
@@ -251,7 +271,7 @@ export default function QuotationsPage() {
       // Quotation details
       doc.setFontSize(12);
       doc.setFont("helvetica", "normal");
-      doc.text(`Quotation ID: ${q.id}`, 10, 70);
+      doc.text(`Quotation ID: ${q.userDefinedId}`, 10, 70);
       doc.text(`Date: ${q.date}`, 10, 77);
       doc.text(`Currency: ${q.currency}`, 10, 84);
   
@@ -317,7 +337,7 @@ export default function QuotationsPage() {
       doc.text(`${getCurrencySymbol(q.currency)}${(q.totalAmount || 0).toFixed(2)}`, colX.amount, y, { align: "right", maxWidth: 100 }); // Increased space and added maxWidth
   
       // Save
-      doc.save(`Quotation_${q.id}.pdf`);
+      doc.save(`Quotation_${q.userDefinedId}.pdf`);
       showToast("PDF downloaded successfully!", "success");
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -327,6 +347,7 @@ export default function QuotationsPage() {
 
   const resetForm = () => {
     setFormData({
+      userDefinedId: "",
       date: new Date().toISOString().split('T')[0],
       items: [{ itemName: "", description: "", amount: "" }],
       currency: "USD",
@@ -414,7 +435,7 @@ export default function QuotationsPage() {
                   currentItems.map((q) => (
                     <tr key={q.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
-                        {q.id}
+                        {q.userDefinedId}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {q.date}
@@ -471,7 +492,7 @@ export default function QuotationsPage() {
                   <div key={q.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{q.id}</p>
+                        <p className="font-medium text-gray-900 text-sm">{q.userDefinedId}</p>
                         <p className="text-gray-500 text-sm">Date: {q.date}</p>
                         <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(q.currency)}{(q.totalAmount || 0).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {q.currency}</p>
@@ -529,6 +550,26 @@ export default function QuotationsPage() {
                 {editingQuotation ? "Edit Quotation" : "Add New Quotation"}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="userDefinedId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Quotation ID
+                  </label>
+                  <input
+                    id="userDefinedId"
+                    type="text"
+                    value={formData.userDefinedId}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      // Auto-add QO- prefix if not present
+                      if (value && !value.startsWith('QO-')) {
+                        value = 'QO-' + value.replace(/^QO-/, '');
+                      }
+                      setFormData({ ...formData, userDefinedId: value });
+                    }}
+                    placeholder="Enter quotation ID (QO- will be added automatically)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
                 <div>
                   <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
                     Currency

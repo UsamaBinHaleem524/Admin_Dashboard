@@ -16,7 +16,24 @@ export async function POST(request) {
     await connectDB();
     const data = await request.json();
     
-    const purchaseOrder = new PurchaseOrder(data);
+    // Validate required fields
+    if (!data.userDefinedId || !data.supplier || !data.date || !data.items || !data.currency) {
+      return Response.json({ error: 'Missing required fields: userDefinedId, supplier, date, items, currency' }, { status: 400 });
+    }
+    
+    // Check if userDefinedId already exists
+    const existingPurchaseOrder = await PurchaseOrder.findOne({ userDefinedId: data.userDefinedId });
+    if (existingPurchaseOrder) {
+      return Response.json({ error: 'Purchase Order ID already exists. Please use a different ID.' }, { status: 400 });
+    }
+    
+    // Generate internal ID
+    const internalId = `po-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const purchaseOrder = new PurchaseOrder({
+      ...data,
+      id: internalId,
+    });
     await purchaseOrder.save();
     
     return Response.json(purchaseOrder, { status: 201 });
@@ -29,6 +46,20 @@ export async function PUT(request) {
   try {
     await connectDB();
     const data = await request.json();
+    
+    // Validate required fields
+    if (!data.id || !data.userDefinedId || !data.supplier || !data.date || !data.items || !data.currency) {
+      return Response.json({ error: 'Missing required fields: id, userDefinedId, supplier, date, items, currency' }, { status: 400 });
+    }
+    
+    // Check if userDefinedId already exists for a different purchase order
+    const existingPurchaseOrder = await PurchaseOrder.findOne({ 
+      userDefinedId: data.userDefinedId,
+      id: { $ne: data.id } // Exclude current purchase order from check
+    });
+    if (existingPurchaseOrder) {
+      return Response.json({ error: 'Purchase Order ID already exists. Please use a different ID.' }, { status: 400 });
+    }
     
     const purchaseOrder = await PurchaseOrder.findOneAndUpdate(
       { id: data.id },

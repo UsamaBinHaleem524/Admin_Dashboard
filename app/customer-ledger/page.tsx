@@ -6,33 +6,24 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
-import { customerTransactionsAPI, productsAPI } from "@/lib/api"
+import { customerTransactionsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
-
-interface Product {
-  id: string
-  name: string
-  date: string
-}
 
 interface CustomerTransaction {
   id: string
   customer: string
-  unit: "yard" | "meter"
-  item: string
   description: string
   date: string
-  totalAmount: number
-  givenAmount: number
-  remainingAmount: number
   currency: "USD" | "PKR" | "SAR"
+  debit?: number
+  credit?: number
+  balance?: number
 }
 
 export default function CustomerLedgerPage() {
   const [transactions, setTransactions] = useState<CustomerTransaction[]>([])
   const [filteredTransactions, setFilteredTransactions] = useState<CustomerTransaction[]>([])
-  const [products, setProducts] = useState<Product[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
@@ -45,19 +36,16 @@ export default function CustomerLedgerPage() {
   })
   const [formData, setFormData] = useState({
     customer: "",
-    unit: "yard" as "yard" | "meter",
-    item: "",
     description: "",
-    totalAmount: "",
-    givenAmount: "",
-    remainingAmount: "",
+    date: new Date().toISOString().split('T')[0],
     currency: "USD" as "USD" | "PKR" | "SAR",
+    debit: "",
+    credit: "",
   })
   const { showToast } = useToast()
 
   useEffect(() => {
     loadTransactions()
-    loadProducts()
   }, [])
 
   useEffect(() => {
@@ -81,20 +69,6 @@ export default function CustomerLedgerPage() {
     }
   }
 
-  const loadProducts = async () => {
-    try {
-      const data = await productsAPI.getAll()
-      setProducts(data)
-    } catch (error) {
-      showToast("Failed to load products", "error")
-      console.error("Error loading products:", error)
-    }
-  }
-
-  const saveTransactions = async (newTransactions: CustomerTransaction[]) => {
-    setTransactions(newTransactions)
-  }
-
   const filterTransactions = () => {
     if (!searchTerm) {
       setFilteredTransactions(transactions)
@@ -102,7 +76,6 @@ export default function CustomerLedgerPage() {
       const filtered = transactions.filter(
         (transaction) =>
           transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (transaction.item && transaction.item.toLowerCase().includes(searchTerm.toLowerCase())) ||
           transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
           transaction.date.includes(searchTerm) ||
           transaction.currency.toLowerCase().includes(searchTerm.toLowerCase())
@@ -114,26 +87,33 @@ export default function CustomerLedgerPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.customer || !formData.description || !formData.totalAmount || !formData.givenAmount || !formData.currency) {
+    if (!formData.customer || !formData.description || !formData.date || !formData.currency) {
       showToast("Please fill in all required fields", "error")
       return
     }
 
-    const totalAmount = Number.parseFloat(formData.totalAmount)
-    const givenAmount = Number.parseFloat(formData.givenAmount)
-    const remainingAmount = totalAmount - givenAmount
+    const debit = Number.parseFloat(formData.debit) || 0
+    const credit = Number.parseFloat(formData.credit) || 0
+
+    if (debit === 0 && credit === 0) {
+      showToast("Please enter either a debit or credit amount", "error")
+      return
+    }
+
+    if (debit > 0 && credit > 0) {
+      showToast("Please enter either debit OR credit, not both", "error")
+      return
+    }
 
     const transactionData: CustomerTransaction = {
       id: editingTransaction ? editingTransaction.id : Date.now().toString(),
       customer: formData.customer,
-      unit: formData.unit,
-      item: formData.item,
       description: formData.description,
-      date: new Date().toISOString().split('T')[0],
-      totalAmount,
-      givenAmount,
-      remainingAmount,
+      date: formData.date,
       currency: formData.currency,
+      debit: debit || 0,
+      credit: credit || 0,
+      balance: 0, // This will be calculated by the API
     }
 
     try {
@@ -158,13 +138,11 @@ export default function CustomerLedgerPage() {
     setEditingTransaction(transaction)
     setFormData({
       customer: transaction.customer,
-      unit: transaction.unit,
-      item: transaction.item || "",
       description: transaction.description,
-      totalAmount: transaction.totalAmount.toString(),
-      givenAmount: transaction.givenAmount.toString(),
-      remainingAmount: transaction.remainingAmount.toString(),
+      date: transaction.date,
       currency: transaction.currency,
+      debit: (transaction.debit || 0).toString(),
+      credit: (transaction.credit || 0).toString(),
     })
     setIsDialogOpen(true)
   }
@@ -191,13 +169,11 @@ export default function CustomerLedgerPage() {
   const resetForm = () => {
     setFormData({
       customer: "",
-      unit: "yard",
-      item: "",
       description: "",
-      totalAmount: "",
-      givenAmount: "",
-      remainingAmount: "",
+      date: new Date().toISOString().split('T')[0],
       currency: "USD",
+      debit: "",
+      credit: "",
     })
     setEditingTransaction(null)
   }
@@ -217,12 +193,6 @@ export default function CustomerLedgerPage() {
     setCurrentPage(page)
   }
 
-  const calculateRemainingAmount = () => {
-    const total = Number.parseFloat(formData.totalAmount) || 0
-    const given = Number.parseFloat(formData.givenAmount) || 0
-    return (total - given).toFixed(2)
-  }
-
   const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
     switch (currency) {
       case "USD": return "$"
@@ -238,7 +208,7 @@ export default function CustomerLedgerPage() {
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Customer Ledger</h1>
-            <p className="text-sm sm:text-base text-gray-600">Manage customer transactions</p>
+            <p className="text-sm sm:text-base text-gray-600">Manage customer transactions and balances</p>
           </div>
           <button
             onClick={openAddDialog}
@@ -255,7 +225,7 @@ export default function CustomerLedgerPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by customer, item, description, date, or currency..."
+                placeholder="Search by customer, description or date"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -267,31 +237,25 @@ export default function CustomerLedgerPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Customer
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Item
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Amount
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Given Amount
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Remaining Amount
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Currency
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Debit
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Credit
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Balance
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -301,44 +265,38 @@ export default function CustomerLedgerPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={8} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No transactions found
                     </td>
                   </tr>
                 ) : (
                   currentItems.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {transaction.date}
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {transaction.customer}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {transaction.unit}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {transaction.item || "-"}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
                         {transaction.description}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {transaction.date}
+                        {transaction.currency}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(transaction.currency)}{transaction.totalAmount.toFixed(2)}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-red-600 text-sm sm:text-base">
+                        {(transaction.debit || 0) > 0 ? `${getCurrencySymbol(transaction.currency)}${(transaction.debit || 0).toFixed(2)}` : "-"}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(transaction.currency)}{transaction.givenAmount.toFixed(2)}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-green-600 text-sm sm:text-base">
+                        {(transaction.credit || 0) > 0 ? `${getCurrencySymbol(transaction.currency)}${(transaction.credit || 0).toFixed(2)}` : "-"}
                       </td>
                       <td
                         className={cn(
-                          "px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base",
-                          transaction.remainingAmount < 0 ? "text-red-800" : "text-green-800"
+                          "px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-sm sm:text-base",
+                          (transaction.balance || 0) < 0 ? "text-red-800" : "text-green-800"
                         )}
                       >
-                        {getCurrencySymbol(transaction.currency)}{transaction.remainingAmount.toFixed(2)}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {transaction.currency}
+                        {getCurrencySymbol(transaction.currency)}{(transaction.balance || 0).toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
@@ -383,8 +341,20 @@ export default function CustomerLedgerPage() {
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
+                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date *
+                  </label>
+                  <input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  />
+                </div>
+                <div>
                   <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer
+                    Customer *
                   </label>
                   <input
                     id="customer"
@@ -396,40 +366,8 @@ export default function CustomerLedgerPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit
-                  </label>
-                  <select
-                    id="unit"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value as "yard" | "meter" })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  >
-                    <option value="yard">Yard</option>
-                    <option value="meter">Meter</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
-                    Item
-                  </label>
-                  <select
-                    id="item"
-                    value={formData.item}
-                    onChange={(e) => setFormData({ ...formData, item: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  >
-                    <option value="">Select an item</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.name}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
+                    Description *
                   </label>
                   <input
                     id="description"
@@ -442,7 +380,7 @@ export default function CustomerLedgerPage() {
                 </div>
                 <div>
                   <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
-                    Currency
+                    Currency *
                   </label>
                   <select
                     id="currency"
@@ -456,43 +394,45 @@ export default function CustomerLedgerPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Amount
+                  <label htmlFor="debit" className="block text-sm font-medium text-gray-700 mb-1">
+                    Debit Amount
                   </label>
                   <input
-                    id="totalAmount"
+                    id="debit"
                     type="number"
                     step="0.01"
-                    value={formData.totalAmount}
-                    onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
-                    placeholder="Enter total amount"
+                    value={formData.debit}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setFormData({ 
+                        ...formData, 
+                        debit: value,
+                        credit: value ? "" : formData.credit // Clear credit if debit is entered
+                      })
+                    }}
+                    placeholder="Enter debit amount"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   />
                 </div>
                 <div>
-                  <label htmlFor="givenAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Given Amount
+                  <label htmlFor="credit" className="block text-sm font-medium text-gray-700 mb-1">
+                    Credit Amount
                   </label>
                   <input
-                    id="givenAmount"
+                    id="credit"
                     type="number"
                     step="0.01"
-                    value={formData.givenAmount}
-                    onChange={(e) => setFormData({ ...formData, givenAmount: e.target.value })}
-                    placeholder="Enter given amount"
+                    value={formData.credit}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setFormData({ 
+                        ...formData, 
+                        credit: value,
+                        debit: value ? "" : formData.debit // Clear debit if credit is entered
+                      })
+                    }}
+                    placeholder="Enter credit amount"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="remainingAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                    Remaining Amount
-                  </label>
-                  <input
-                    id="remainingAmount"
-                    type="text"
-                    value={`${getCurrencySymbol(formData.currency)}${calculateRemainingAmount()}`}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm sm:text-base"
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
@@ -522,7 +462,6 @@ export default function CustomerLedgerPage() {
           onConfirm={() => deleteModal.transaction && handleDelete(deleteModal.transaction.id)}
           title="Delete Transaction"
           message="Are you sure you want to delete this transaction? This action cannot be undone."
-          itemName={`${deleteModal.transaction?.customer} - ${deleteModal.transaction?.description}`}
         />
       </div>
     </DashboardLayout>

@@ -27,6 +27,7 @@ interface PurchaseOrderItem {
 
 interface PurchaseOrder {
   id: string
+  userDefinedId: string
   supplier: string
   date: string
   items: PurchaseOrderItem[]
@@ -49,6 +50,7 @@ export default function PurchaseOrdersPage() {
     purchaseOrder: null,
   })
   const [formData, setFormData] = useState({
+    userDefinedId: "",
     supplier: "",
     date: new Date().toISOString().split('T')[0],
     items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
@@ -103,7 +105,7 @@ export default function PurchaseOrdersPage() {
     } else {
       const filtered = purchaseOrders.filter(
         (po) =>
-          po.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          po.userDefinedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           po.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
           po.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -154,16 +156,21 @@ export default function PurchaseOrdersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!formData.userDefinedId) {
+      showToast("Please enter a Purchase Order ID", "error")
+      return
+    }
+
     if (!formData.supplier || !formData.currency || formData.items.some(item => !item.itemName || !item.quantity || !item.unitPrice)) {
       showToast("Please fill in all required fields for all items", "error")
       return
     }
 
     const totalAmount = Number.parseFloat(calculateTotalAmount())
-    const poId = editingPurchaseOrder ? editingPurchaseOrder.id : `PO-${Date.now().toString().slice(-6)}`
 
     const purchaseOrderData: PurchaseOrder = {
-      id: poId,
+      id: editingPurchaseOrder ? editingPurchaseOrder.id : "",
+      userDefinedId: formData.userDefinedId,
       supplier: formData.supplier,
       date: formData.date,
       items: formData.items.map(item => ({
@@ -197,6 +204,7 @@ export default function PurchaseOrdersPage() {
   const handleEdit = (purchaseOrder: PurchaseOrder) => {
     setEditingPurchaseOrder(purchaseOrder)
     setFormData({
+      userDefinedId: purchaseOrder.userDefinedId,
       supplier: purchaseOrder.supplier,
       date: purchaseOrder.date,
       items: purchaseOrder.items.map(item => ({
@@ -239,7 +247,19 @@ export default function PurchaseOrdersPage() {
       const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
 
       // Add logo
-      doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
+      try {
+        const logoResponse = await fetch('/logo.jpeg');
+        const logoBlob = await logoResponse.blob();
+        const logoBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(logoBlob);
+        });
+        doc.addImage(logoBase64 as string, 'JPEG', 10, 10, 40, 30);
+      } catch (error) {
+        // Fallback to placeholder if logo fails to load
+        doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
+      }
 
       // Header
       doc.setFontSize(20);
@@ -264,7 +284,7 @@ export default function PurchaseOrdersPage() {
 
       // PO Details
       const rightX = pageWidth - 10;
-      doc.text(`PO Number: ${po.id}`, rightX, 70, { align: 'right' });
+      doc.text(`PO Number: ${po.userDefinedId}`, rightX, 70, { align: 'right' });
       doc.text(`Date: ${po.date}`, rightX, 78, { align: 'right' });
 
       // Table Headers
@@ -311,7 +331,7 @@ export default function PurchaseOrdersPage() {
       doc.text("Total", colX.unitPrice, y, { align: "center" });
       doc.text(`${getCurrencySymbol(po.currency)}${(po.totalAmount || 0).toFixed(2)}`, colX.amount, y, { align: "center" });
 
-      doc.save(`Purchase_Order_${po.id}.pdf`);
+      doc.save(`Purchase_Order_${po.userDefinedId}.pdf`);
       showToast("PDF downloaded successfully!", "success");
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -321,6 +341,7 @@ export default function PurchaseOrdersPage() {
 
   const resetForm = () => {
     setFormData({
+      userDefinedId: "",
       supplier: "",
       date: new Date().toISOString().split('T')[0],
       items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
@@ -412,7 +433,7 @@ export default function PurchaseOrdersPage() {
                   currentItems.map((po) => (
                     <tr key={po.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
-                        {po.id}
+                        {po.userDefinedId}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.supplier}
@@ -531,6 +552,26 @@ export default function PurchaseOrdersPage() {
                 {editingPurchaseOrder ? "Edit Purchase Order" : "Add New Purchase Order"}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="userDefinedId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Purchase Order ID
+                  </label>
+                  <input
+                    id="userDefinedId"
+                    type="text"
+                    value={formData.userDefinedId}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      // Auto-add PO- prefix if not present
+                      if (value && !value.startsWith('PO-')) {
+                        value = 'PO-' + value.replace(/^PO-/, '');
+                      }
+                      setFormData({ ...formData, userDefinedId: value });
+                    }}
+                    placeholder="Enter purchase order ID (PO- will be added automatically)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
                 <div>
                   <label htmlFor="supplier" className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier
