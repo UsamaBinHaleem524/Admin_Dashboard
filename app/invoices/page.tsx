@@ -135,6 +135,7 @@ export default function InvoicesPage() {
     const newItems = [...formData.items]
     newItems[index] = { ...newItems[index], [field]: value }
 
+    // Recalculate amount whenever quantity, unitPrice, or vatPercentage changes
     if (field === "quantity" || field === "unitPrice" || field === "vatPercentage") {
       const quantity = Number.parseFloat(newItems[index].quantity || "0")
       const unitPrice = Number.parseFloat(newItems[index].unitPrice || "0")
@@ -149,7 +150,14 @@ export default function InvoicesPage() {
 
   const calculateTotalAmount = () => {
     return formData.items
-      .reduce((sum, item) => sum + Number.parseFloat(item.amount || "0"), 0)
+      .reduce((sum, item) => {
+        const quantity = Number.parseFloat(item.quantity || "0")
+        const unitPrice = Number.parseFloat(item.unitPrice || "0")
+        const vatPercentage = Number.parseFloat(item.vatPercentage || "0")
+        const subtotal = quantity * unitPrice
+        const vatAmount = subtotal * (vatPercentage / 100)
+        return sum + subtotal + vatAmount
+      }, 0)
       .toFixed(2)
   }
 
@@ -160,6 +168,18 @@ export default function InvoicesPage() {
       case "SAR": return "ر.س"
       default: return ""
     }
+  }
+
+  const calculateInvoiceTotal = (invoice: Invoice) => {
+    // If totalAmount is 0 or missing, calculate it from items
+    if (!invoice.totalAmount || invoice.totalAmount === 0) {
+      return invoice.items.reduce((sum, item) => {
+        const subtotal = (item.quantity || 0) * (item.unitPrice || 0)
+        const vatAmount = subtotal * ((item.vatPercentage || 0) / 100)
+        return sum + subtotal + vatAmount
+      }, 0)
+    }
+    return invoice.totalAmount
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,22 +200,34 @@ export default function InvoicesPage() {
       return
     }
 
-    const totalAmount = Number.parseFloat(calculateTotalAmount())
+    // Calculate total amount and ensure all item amounts are correct
+    const calculatedItems = formData.items.map(item => {
+      const quantity = Number.parseFloat(item.quantity)
+      const unitPrice = Number.parseFloat(item.unitPrice)
+      const vatPercentage = Number.parseFloat(item.vatPercentage)
+      const subtotal = quantity * unitPrice
+      const vatAmount = subtotal * (vatPercentage / 100)
+      const amount = subtotal + vatAmount
+      
+      return {
+        itemName: item.itemName,
+        description: item.description,
+        quantity,
+        unit: item.unit,
+        unitPrice,
+        vatPercentage,
+        amount,
+      }
+    })
+
+    const totalAmount = calculatedItems.reduce((sum, item) => sum + item.amount, 0)
 
     const invoiceData: Invoice = {
       id: editingInvoice ? editingInvoice.id : "",
       userDefinedId: formData.userDefinedId,
       date: formData.date,
       invoiceType: formData.invoiceType,
-      items: formData.items.map(item => ({
-        itemName: item.itemName,
-        description: item.description,
-        quantity: Number.parseFloat(item.quantity),
-        unit: item.unit,
-        unitPrice: Number.parseFloat(item.unitPrice),
-        vatPercentage: Number.parseFloat(item.vatPercentage),
-        amount: Number.parseFloat(item.amount),
-      })),
+      items: calculatedItems,
       totalAmount,
       currency: formData.currency,
     }
@@ -224,15 +256,22 @@ export default function InvoicesPage() {
       userDefinedId: invoice.userDefinedId,
       date: invoice.date,
       invoiceType: invoice.invoiceType,
-      items: invoice.items.map(item => ({
-        itemName: item.itemName,
-        description: item.description,
-        quantity: item.quantity.toString(),
-        unit: item.unit,
-        unitPrice: item.unitPrice.toString(),
-        vatPercentage: item.vatPercentage.toString(),
-        amount: item.amount.toString(),
-      })),
+      items: invoice.items.map(item => {
+        // Recalculate amount to ensure it's correct
+        const subtotal = item.quantity * item.unitPrice
+        const vatAmount = subtotal * (item.vatPercentage / 100)
+        const calculatedAmount = subtotal + vatAmount
+        
+        return {
+          itemName: item.itemName,
+          description: item.description,
+          quantity: item.quantity.toString(),
+          unit: item.unit,
+          unitPrice: item.unitPrice.toString(),
+          vatPercentage: item.vatPercentage.toString(),
+          amount: calculatedAmount.toFixed(2),
+        }
+      }),
       currency: invoice.currency,
     })
     setIsDialogOpen(true)
@@ -283,21 +322,21 @@ export default function InvoicesPage() {
       }
   
             // Invoice Header Section (Right side)
-      doc.setFontSize(16);
+      doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
       doc.text(inv.userDefinedId || 'INVOICE', pageWidth - 25, 25, { align: "right" });
 
       // Invoice details (right side)
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
       doc.text(`Invoice Date: ${inv.date}`, pageWidth - 25, 35, { align: "right" });
   
       // Sender Information (Left side - Company details)
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
       doc.text(companyProfile.name || 'Company Name', 15, 60);
       
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
       doc.text(companyProfile.contact || 'Contact Person', 15, 70);
       doc.text(companyProfile.address || 'Company Address', 15, 77);
@@ -311,37 +350,37 @@ export default function InvoicesPage() {
       let y = 110;
       
       // Table headers with professional styling
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
       
       const colX = {
         rowNo: 15,
         description: 35,
         date: 85,
-        qty: 105,
+        qty: 110,
         unit: 125,
-        unitPrice: 145,
-        vat: 165,
-        total: 185,
+        unitPrice: 155,
+        vat: 170,
+        total: 195,
       };
   
       // Header row with background
       doc.setFillColor(240, 240, 240);
-      doc.rect(10, y - 5, pageWidth - 20, 12, 'F');
+      doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
       
-      doc.text("Row no.", colX.rowNo, y);
-      doc.text("Description", colX.description, y);
-      doc.text("Date", colX.date, y);
-      doc.text("Qty", colX.qty, y);
-      doc.text("Unit", colX.unit, y);
-      doc.text("Unit price", colX.unitPrice, y);
-      doc.text("VAT %", colX.vat, y);
-      doc.text("Total", colX.total, y);
+      doc.text("Row no.", colX.rowNo, y - 2);
+      doc.text("Description", colX.description, y - 2);
+      doc.text("Date", colX.date, y - 2);
+      doc.text("Qty", colX.qty, y - 2, { align: "right" });
+      doc.text("Unit", colX.unit, y - 2);
+      doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+      doc.text("VAT %", colX.vat, y - 2, { align: "right" });
+      doc.text("Total", colX.total, y - 2, { align: "right" });
   
       y += 8;
   
       // Table rows
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       
       let subtotal = 0;
@@ -353,21 +392,21 @@ export default function InvoicesPage() {
                  y = 20;
 
                  // Repeat header on new page
-                 doc.setFontSize(11);
+                 doc.setFontSize(10);
                  doc.setFont("helvetica", "bold");
                  doc.setFillColor(240, 240, 240);
-                 doc.rect(10, y - 5, pageWidth - 20, 12, 'F');
+                 doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
 
-                 doc.text("Row no.", colX.rowNo, y);
-                 doc.text("Description", colX.description, y);
-                 doc.text("Date", colX.date, y);
-                 doc.text("Qty", colX.qty, y);
-                 doc.text("Unit", colX.unit, y);
-                 doc.text("Unit price", colX.unitPrice, y);
-                 doc.text("VAT %", colX.vat, y);
-                 doc.text("Total", colX.total, y);
+                 doc.text("Row no.", colX.rowNo, y - 2);
+                 doc.text("Description", colX.description, y - 2);
+                 doc.text("Date", colX.date, y - 2);
+                 doc.text("Qty", colX.qty, y - 2, { align: "right" });
+                 doc.text("Unit", colX.unit, y - 2);
+                 doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+                 doc.text("VAT %", colX.vat, y - 2, { align: "right" });
+                 doc.text("Total", colX.total, y - 2, { align: "right" });
                  y += 8;
-                 doc.setFontSize(9);
+                 doc.setFontSize(8);
                  doc.setFont("helvetica", "normal");
                }
 
@@ -381,20 +420,25 @@ export default function InvoicesPage() {
                  doc.text(`${index + 1}`, colX.rowNo, y);
          doc.text(item.itemName || '', colX.description, y);
          doc.text(inv.date || '', colX.date, y);
-         doc.text((item.quantity || 0).toString(), colX.qty, y);
+         doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
          doc.text(item.unit || '', colX.unit, y);
-         doc.text(`US$${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y);
-         doc.text(`${(item.vatPercentage || 0).toFixed(2)}%`, colX.vat, y);
-         doc.text(`US$${itemTotal.toFixed(2)}`, colX.total, y);
+         doc.text(`US$${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y, { align: "right" });
+         doc.text(`${(item.vatPercentage || 0).toFixed(2)}%`, colX.vat, y, { align: "right" });
+         doc.text(`US$${itemTotal.toFixed(2)}`, colX.total, y, { align: "right" });
   
         y += 6;
       });
+  
+      // Add horizontal line after items
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.line(10, y + 2, pageWidth - 10, y + 2);
   
       // Summary Section (Right side) - Fixed layout
       const summaryX = pageWidth - 80;
       const summaryY = y + 10;
       
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       
       doc.text("Subtotal:", summaryX, summaryY);
@@ -403,18 +447,19 @@ export default function InvoicesPage() {
       doc.text("Total amount due:", summaryX, summaryY + 24);
       
       doc.setFont("helvetica", "normal");
-      const finalTotal = inv.totalAmount || (subtotal + totalVAT);
+      const finalTotal = calculateInvoiceTotal(inv);
       doc.text(`US$${subtotal.toFixed(2)}`, summaryX + 50, summaryY, { align: "right" });
       doc.text(`US$${subtotal.toFixed(2)}`, summaryX + 50, summaryY + 8, { align: "right" });
       doc.text(`US$${totalVAT.toFixed(2)}`, summaryX + 50, summaryY + 16, { align: "right" });
       doc.text(`US$${finalTotal.toFixed(2)}`, summaryX + 50, summaryY + 24, { align: "right" });
   
-      // Footer
+      // Footer - Centered with proper styling
       const footerY = pageHeight - 20;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text(companyProfile.name || 'Company Name', 15, footerY);
-      doc.text(companyProfile.address || 'Company Address', 15, footerY + 6);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyProfile.name || 'Company Name', pageWidth / 2, footerY, { align: "center" });
+      doc.setFont("helvetica", "italic");
+      doc.text(companyProfile.address || 'Company Address', pageWidth / 2, footerY + 6, { align: "center" });
   
       // Save
       doc.save(`Invoice_${inv.userDefinedId}.pdf`);
@@ -528,7 +573,7 @@ export default function InvoicesPage() {
                         {inv.date}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(inv.currency)}{(inv.totalAmount || 0).toFixed(2)}
+                        {getCurrencySymbol(inv.currency)}{calculateInvoiceTotal(inv).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {inv.currency}
@@ -582,7 +627,7 @@ export default function InvoicesPage() {
                         <p className="font-medium text-gray-900 text-sm">{inv.id}</p>
                         <p className="text-gray-500 text-sm">Type: {inv.invoiceType}</p>
                         <p className="text-gray-500 text-sm">Date: {inv.date}</p>
-                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{(inv.totalAmount || 0).toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{calculateInvoiceTotal(inv).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {inv.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">
                           {inv.items.map((item, index) => (

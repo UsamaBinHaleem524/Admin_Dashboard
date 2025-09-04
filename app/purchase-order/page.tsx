@@ -140,7 +140,11 @@ export default function PurchaseOrdersPage() {
 
   const calculateTotalAmount = () => {
     return formData.items
-      .reduce((sum, item) => sum + Number.parseFloat(item.amount || "0"), 0)
+      .reduce((sum, item) => {
+        const quantity = Number.parseFloat(item.quantity || "0")
+        const unitPrice = Number.parseFloat(item.unitPrice || "0")
+        return sum + (quantity * unitPrice)
+      }, 0)
       .toFixed(2)
   }
 
@@ -151,6 +155,16 @@ export default function PurchaseOrdersPage() {
       case "SAR": return "ر.س"
       default: return ""
     }
+  }
+
+  const calculatePurchaseOrderTotal = (purchaseOrder: PurchaseOrder) => {
+    // If totalAmount is 0 or missing, calculate it from items
+    if (!purchaseOrder.totalAmount || purchaseOrder.totalAmount === 0) {
+      return purchaseOrder.items.reduce((sum, item) => {
+        return sum + ((item.quantity || 0) * (item.unitPrice || 0))
+      }, 0)
+    }
+    return purchaseOrder.totalAmount
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -166,19 +180,28 @@ export default function PurchaseOrdersPage() {
       return
     }
 
-    const totalAmount = Number.parseFloat(calculateTotalAmount())
+    // Calculate total amount and ensure all item amounts are correct
+    const calculatedItems = formData.items.map(item => {
+      const quantity = Number.parseFloat(item.quantity)
+      const unitPrice = Number.parseFloat(item.unitPrice)
+      const amount = quantity * unitPrice
+      
+      return {
+        itemName: item.itemName,
+        quantity,
+        unitPrice,
+        amount,
+      }
+    })
+
+    const totalAmount = calculatedItems.reduce((sum, item) => sum + item.amount, 0)
 
     const purchaseOrderData: PurchaseOrder = {
       id: editingPurchaseOrder ? editingPurchaseOrder.id : "",
       userDefinedId: formData.userDefinedId,
       supplier: formData.supplier,
       date: formData.date,
-      items: formData.items.map(item => ({
-        itemName: item.itemName,
-        quantity: Number.parseFloat(item.quantity),
-        unitPrice: Number.parseFloat(item.unitPrice),
-        amount: Number.parseFloat(item.amount),
-      })),
+      items: calculatedItems,
       totalAmount,
       currency: formData.currency,
     }
@@ -207,12 +230,17 @@ export default function PurchaseOrdersPage() {
       userDefinedId: purchaseOrder.userDefinedId,
       supplier: purchaseOrder.supplier,
       date: purchaseOrder.date,
-      items: purchaseOrder.items.map(item => ({
-        itemName: item.itemName,
-        quantity: item.quantity.toString(),
-        unitPrice: item.unitPrice.toString(),
-        amount: item.amount.toString(),
-      })),
+      items: purchaseOrder.items.map(item => {
+        // Recalculate amount to ensure it's correct
+        const calculatedAmount = item.quantity * item.unitPrice
+        
+        return {
+          itemName: item.itemName,
+          quantity: item.quantity.toString(),
+          unitPrice: item.unitPrice.toString(),
+          amount: calculatedAmount.toFixed(2),
+        }
+      }),
       currency: purchaseOrder.currency,
     })
     setIsDialogOpen(true)
@@ -240,13 +268,13 @@ export default function PurchaseOrdersPage() {
   const handleDownloadPDF = async (po: PurchaseOrder) => {
     try {
       const doc = new jsPDF();
-      const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
       const pageWidth = doc.internal.pageSize.getWidth();
-
+      const pageHeight = doc.internal.pageSize.getHeight();
+  
       // Get company profile data
       const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
-
-      // Add logo
+  
+      // Logo (top-left corner) - larger size like in the reference
       try {
         const logoResponse = await fetch('/logo.jpeg');
         const logoBlob = await logoResponse.blob();
@@ -255,82 +283,131 @@ export default function PurchaseOrdersPage() {
           reader.onloadend = () => resolve(reader.result);
           reader.readAsDataURL(logoBlob);
         });
-        doc.addImage(logoBase64 as string, 'JPEG', 10, 10, 40, 30);
+        doc.addImage(logoBase64 as string, 'JPEG', 15, 15, 35, 35);
       } catch (error) {
         // Fallback to placeholder if logo fails to load
-        doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
+        const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        doc.addImage(imgData, 'PNG', 15, 15, 35, 35);
       }
-
-      // Header
-      doc.setFontSize(20);
-      doc.setFont("helvetica", "bold");
-      doc.text("PURCHASE ORDER", pageWidth / 2, 30, { align: 'center' });
-
+  
+      // Purchase Order Header Section (Right side)
       doc.setFontSize(14);
-      doc.setFont("helvetica", "normal");
-      doc.text(companyProfile.name, pageWidth / 2, 40, { align: 'center' });
-
-      doc.setFontSize(10);
-      doc.text(companyProfile.contact, 10, 50);
-      doc.text(companyProfile.email, 10, 55);
-
-      // Vendor Details
-      doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text("VENDOR", 10, 70);
+      doc.text(po.userDefinedId || 'PURCHASE ORDER', pageWidth - 25, 25, { align: "right" });
+
+      // Purchase Order details (right side)
+      doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(po.supplier, 10, 78);
-      doc.text(companyProfile.address, 10, 85);
+      doc.text(`PO Date: ${po.date}`, pageWidth - 25, 35, { align: "right" });
+  
+      // Sender Information (Left side - Company details)
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyProfile.name || 'Company Name', 15, 60);
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(companyProfile.contact || 'Contact Person', 15, 70);
+      doc.text(companyProfile.address || 'Company Address', 15, 77);
+      doc.text(companyProfile.email || 'Phone Number', 15, 84);
 
-      // PO Details
-      const rightX = pageWidth - 10;
-      doc.text(`PO Number: ${po.userDefinedId}`, rightX, 70, { align: 'right' });
-      doc.text(`Date: ${po.date}`, rightX, 78, { align: 'right' });
-
-      // Table Headers
-      let y = 100;
+      // Supplier Information (Right side)
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setFont("helvetica", "normal");
+  
+      // Table Section
+      let y = 110;
+      
+      // Table headers with professional styling
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      
       const colX = {
-        itemName: 10,
-        quantity: 100,
-        unitPrice: 130,
-        amount: 160,
+        rowNo: 15,
+        description: 35,
+        date: 85,
+        qty: 110,
+        unitPrice: 155,
+        amount: 193,
       };
-
-      doc.setFontSize(12);
-      doc.setFont("courier", "bold");
-      doc.text("Item Name", colX.itemName, y);
-      doc.text("Qty", colX.quantity, y, { align: "center" });
-      doc.text("Unit Price", colX.unitPrice, y, { align: "center" });
-      doc.text("Amount", colX.amount, y, { align: "center" });
-
-      y += 6;
-      doc.setLineWidth(0.2);
-      doc.line(10, y, 200, y); // table header underline
-      y += 4;
-
-      // Table Rows
-      doc.setFont("courier", "normal");
+  
+      // Header row with background
+      doc.setFillColor(240, 240, 240);
+      doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
+      
+      doc.text("Row no.", colX.rowNo, y - 2);
+      doc.text("Description", colX.description, y - 2);
+      doc.text("Date", colX.date, y - 2);
+      doc.text("Qty", colX.qty, y - 2, { align: "right" });
+      doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+      doc.text("Amount", colX.amount, y - 2, { align: "right" });
+  
+      y += 8;
+  
+      // Table rows
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      
       po.items.forEach((item, index) => {
-        if (y > 270) {
+        if (y > pageHeight - 80) {
           doc.addPage();
           y = 20;
+
+          // Repeat header on new page
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setFillColor(240, 240, 240);
+          doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
+
+          doc.text("Row no.", colX.rowNo, y - 2);
+          doc.text("Description", colX.description, y - 2);
+          doc.text("Date", colX.date, y - 2);
+          doc.text("Qty", colX.qty, y - 2, { align: "right" });
+          doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+          doc.text("Amount", colX.amount, y - 2, { align: "right" });
+          y += 8;
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
         }
 
-        doc.text(item.itemName || '', colX.itemName, y);
-        doc.text((item.quantity || 0).toString(), colX.quantity, y, { align: "center" });
-        doc.text(`${getCurrencySymbol(po.currency)}${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y, { align: "center" });
-        doc.text(`${getCurrencySymbol(po.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount, y, { align: "center" });
-        y += 7;
+        doc.text(`${index + 1}`, colX.rowNo, y);
+        doc.text(item.itemName || '', colX.description, y);
+        doc.text(po.date || '', colX.date, y);
+        doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
+        doc.text(`${getCurrencySymbol(po.currency)}${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice - 8, y, { align: "center" });
+        doc.text(`${getCurrencySymbol(po.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount - 2, y, { align: "right" });
+  
+        y += 6;
       });
-
-      // Total
-      y += 3;
-      doc.setFont("courier", "bold");
-      doc.line(10, y, 200, y); // underline before total
-      y += 10;
-      doc.text("Total", colX.unitPrice, y, { align: "center" });
-      doc.text(`${getCurrencySymbol(po.currency)}${(po.totalAmount || 0).toFixed(2)}`, colX.amount, y, { align: "center" });
-
+  
+      // Add horizontal line after items
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.line(10, y + 2, pageWidth - 10, y + 2);
+  
+      // Summary Section (Right side) - Fixed layout
+      const summaryX = pageWidth - 80;
+      const summaryY = y + 10;
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      
+      doc.text("Total Amount:", summaryX, summaryY);
+      
+      doc.setFont("helvetica", "normal");
+      const finalTotal = calculatePurchaseOrderTotal(po);
+      doc.text(`${getCurrencySymbol(po.currency)}${finalTotal.toFixed(2)}`, colX.amount-2, summaryY, { align: "right" });
+  
+      // Footer - Centered with proper styling
+      const footerY = pageHeight - 20;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyProfile.name || 'Company Name', pageWidth / 2, footerY, { align: "center" });
+      doc.setFont("helvetica", "italic");
+      doc.text(companyProfile.address || 'Company Address', pageWidth / 2, footerY + 6, { align: "center" });
+  
+      // Save
       doc.save(`Purchase_Order_${po.userDefinedId}.pdf`);
       showToast("PDF downloaded successfully!", "success");
     } catch (error) {
@@ -442,7 +519,7 @@ export default function PurchaseOrdersPage() {
                         {po.date}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {getCurrencySymbol(po.currency)}{(po.totalAmount || 0).toFixed(2)}
+                        {getCurrencySymbol(po.currency)}{calculatePurchaseOrderTotal(po).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.currency}
@@ -496,7 +573,7 @@ export default function PurchaseOrdersPage() {
                         <p className="font-medium text-gray-900 text-sm">{po.id}</p>
                         <p className="text-gray-500 text-sm">Supplier: {po.supplier}</p>
                         <p className="text-gray-500 text-sm">Date: {po.date}</p>
-                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{(po.totalAmount || 0).toFixed(2)}</p>
+                        <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{calculatePurchaseOrderTotal(po).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {po.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">
                           {po.items.map((item, index) => (

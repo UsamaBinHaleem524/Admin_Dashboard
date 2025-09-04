@@ -233,11 +233,12 @@ export default function QuotationsPage() {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
   
       // Get company profile data
       const companyProfile = await getCompanyProfile() || getDefaultCompanyProfile();
   
-      // Logo (top-left corner)
+      // Logo (top-left corner) - larger size like in the reference
       try {
         const logoResponse = await fetch('/logo.jpeg');
         const logoBlob = await logoResponse.blob();
@@ -246,95 +247,116 @@ export default function QuotationsPage() {
           reader.onloadend = () => resolve(reader.result);
           reader.readAsDataURL(logoBlob);
         });
-        doc.addImage(logoBase64 as string, 'JPEG', 10, 10, 40, 30);
+        doc.addImage(logoBase64 as string, 'JPEG', 15, 15, 35, 35);
       } catch (error) {
         // Fallback to placeholder if logo fails to load
         const imgData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-        doc.addImage(imgData, 'PNG', 10, 10, 30, 20);
+        doc.addImage(imgData, 'PNG', 15, 15, 35, 35);
       }
   
-      // Header - QUOTATION title
-      doc.setFontSize(20);
-      doc.setFont("helvetica", "bold");
-      doc.text("QUOTATION", pageWidth / 2, 30, { align: "center" });
-  
-      // Company information
+      // Quotation Header Section (Right side)
       doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(q.userDefinedId || 'QUOTATION', pageWidth - 25, 25, { align: "right" });
+
+      // Quotation details (right side)
+      doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(companyProfile.name, pageWidth / 2, 40, { align: "center" });
+      doc.text(`Quotation Date: ${q.date}`, pageWidth - 25, 35, { align: "right" });
   
+      // Sender Information (Left side - Company details)
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyProfile.name || 'Company Name', 15, 60);
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(companyProfile.contact || 'Contact Person', 15, 70);
+      doc.text(companyProfile.address || 'Company Address', 15, 77);
+      doc.text(companyProfile.email || 'Phone Number', 15, 84);
+  
+      // Table Section
+      let y = 110;
+      
+      // Table headers with professional styling
       doc.setFontSize(10);
-      doc.text(companyProfile.contact, 10, 50);
-      doc.text(companyProfile.email, 10, 55);
-      doc.text(companyProfile.address, 10, 60);
-  
-      // Quotation details
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Quotation ID: ${q.userDefinedId}`, 10, 70);
-      doc.text(`Date: ${q.date}`, 10, 77);
-      doc.text(`Currency: ${q.currency}`, 10, 84);
-  
-      // Table headers
-      let y = 95;
-      doc.setFontSize(12);
-      doc.setFont("courier", "bold");
-  
+      doc.setFont("helvetica", "bold");
+      
       const colX = {
-        index: 10,
-        itemName: 25,
-        description: 70,
-        amount: 160, // Increased from 150 to 160 for more space
+        rowNo: 15,
+        description: 35,
+        date: 85,
+        amount: 195,
       };
   
-      doc.text("No.", colX.index, y);
-      doc.text("Item Name", colX.itemName, y);
-      doc.text("Description", colX.description, y);
-      doc.text("Amount", colX.amount, y, { align: "right" });
+      // Header row with background
+      doc.setFillColor(240, 240, 240);
+      doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
+      
+      doc.text("Row no.", colX.rowNo, y - 2);
+      doc.text("Description", colX.description, y - 2);
+      doc.text("Date", colX.date, y - 2);
+      doc.text("Amount", colX.amount, y - 2, { align: "right" });
   
-      y += 6;
-      doc.setLineWidth(0.2);
-      doc.line(10, y, 200, y); // underline header
-      y += 4;
+      y += 8;
   
       // Table rows
-      doc.setFont("courier", "normal");
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      
       q.items.forEach((item, index) => {
-        if (y > 270) {
+        if (y > pageHeight - 80) {
           doc.addPage();
           y = 20;
-  
-          // Repeat table header
-          doc.setFont("courier", "bold");
-          doc.text("No.", colX.index, y);
-          doc.text("Item Name", colX.itemName, y);
-          doc.text("Description", colX.description, y);
-          doc.text("Amount", colX.amount, y, { align: "right" });
-          y += 10;
-          doc.setFont("courier", "normal");
+
+          // Repeat header on new page
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setFillColor(240, 240, 240);
+          doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
+
+          doc.text("Row no.", colX.rowNo, y - 2);
+          doc.text("Description", colX.description, y - 2);
+          doc.text("Date", colX.date, y - 2);
+          doc.text("Amount", colX.amount, y - 2, { align: "right" });
+          y += 8;
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
         }
-  
-        doc.text(`${index + 1}`, colX.index, y);
-        doc.text(item.itemName, colX.itemName, y, { maxWidth: 45 });
-        doc.text(item.description, colX.description, y, { maxWidth: 80 });
+
+        doc.text(`${index + 1}`, colX.rowNo, y);
+        doc.text(item.itemName || '', colX.description, y);
+        doc.text(q.date || '', colX.date, y);
         doc.text(`${getCurrencySymbol(q.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount, y, { align: "right" });
-        y += 7;
+  
+        y += 6;
       });
   
-      // Total Amount
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
+      // Add horizontal line after items
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.line(10, y + 2, pageWidth - 10, y + 2);
   
-      y += 3;
-      doc.setLineWidth(0.2);
-      doc.line(10, y, 200, y); // underline before total
-      y += 10;
+      // Summary Section (Right side) - Fixed layout
+      const summaryX = pageWidth - 80;
+      const summaryY = y + 10;
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      
+      doc.text("Total Amount:", summaryX, summaryY);
+      
+      doc.setFont("helvetica", "normal");
+      const finalTotal = q.totalAmount || 0;
+      doc.text(`${getCurrencySymbol(q.currency)}${finalTotal.toFixed(2)}`, colX.amount, summaryY, { align: "right" });
   
-      doc.setFont("courier", "bold");
-      doc.text("Total Amount:", 110, y); // Moved left to create more space before amount
-      doc.text(`${getCurrencySymbol(q.currency)}${(q.totalAmount || 0).toFixed(2)}`, colX.amount, y, { align: "right", maxWidth: 100 }); // Increased space and added maxWidth
+      // Footer - Centered with proper styling
+      const footerY = pageHeight - 20;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyProfile.name || 'Company Name', pageWidth / 2, footerY, { align: "center" });
+      doc.setFont("helvetica", "italic");
+      doc.text(companyProfile.address || 'Company Address', pageWidth / 2, footerY + 6, { align: "center" });
   
       // Save
       doc.save(`Quotation_${q.userDefinedId}.pdf`);
