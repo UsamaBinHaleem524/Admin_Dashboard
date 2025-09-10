@@ -17,8 +17,8 @@ export async function POST(request) {
     const data = await request.json();
     
     // Validate required fields
-    if (!data.userDefinedId || !data.date || !data.invoiceType || !data.items || !data.currency) {
-      return Response.json({ error: 'Missing required fields: userDefinedId, date, invoiceType, items, currency' }, { status: 400 });
+    if (!data.userDefinedId || !data.customer || !data.date || !data.invoiceType || !data.items || !data.currency) {
+      return Response.json({ error: 'Missing required fields: userDefinedId, customer, date, invoiceType, items, currency' }, { status: 400 });
     }
     
     // Check if userDefinedId already exists
@@ -48,8 +48,8 @@ export async function PUT(request) {
     const data = await request.json();
     
     // Validate required fields
-    if (!data.id || !data.userDefinedId || !data.date || !data.invoiceType || !data.items || !data.currency) {
-      return Response.json({ error: 'Missing required fields: id, userDefinedId, date, invoiceType, items, currency' }, { status: 400 });
+    if (!data.id || !data.userDefinedId || !data.customer || !data.date || !data.invoiceType || !data.items || !data.currency) {
+      return Response.json({ error: 'Missing required fields: id, userDefinedId, customer, date, invoiceType, items, currency' }, { status: 400 });
     }
     
     // Check if userDefinedId already exists for a different invoice

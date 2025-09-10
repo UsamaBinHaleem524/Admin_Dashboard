@@ -67,8 +67,8 @@ export async function POST(request) {
     const data = await request.json();
     
     // Validate required fields
-    if (!data.supplier || !data.description || !data.amount || !data.date || !data.currency) {
-      return Response.json({ error: 'Missing required fields: supplier, description, amount, date, currency' }, { status: 400 });
+    if (!data.supplier || !data.item || !data.description || !data.amount || !data.date || !data.currency) {
+      return Response.json({ error: 'Missing required fields: supplier, item, description, amount, date, currency' }, { status: 400 });
     }
     
     const purchase = new Purchase({
@@ -90,8 +90,8 @@ export async function PUT(request) {
     const data = await request.json();
     
     // Validate required fields
-    if (!data.supplier || !data.description || !data.amount || !data.date || !data.currency) {
-      return Response.json({ error: 'Missing required fields: supplier, description, amount, date, currency' }, { status: 400 });
+    if (!data.supplier || !data.item || !data.description || !data.amount || !data.date || !data.currency) {
+      return Response.json({ error: 'Missing required fields: supplier, item, description, amount, date, currency' }, { status: 400 });
     }
     
     const purchase = await Purchase.findOneAndUpdate(

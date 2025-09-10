@@ -12,6 +12,7 @@ import { Pagination } from "@/components/ui/pagination"
 interface Purchase {
   id: string
   supplier: string
+  item: string
   description: string
   amount: number
   currency: "USD" | "PKR" | "SAR"
@@ -34,15 +35,18 @@ export default function PurchasesPage() {
   const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "PKR" | "SAR">("USD")
   const [formData, setFormData] = useState({
     supplier: "",
+    item: "",
     description: "",
     amount: "",
     currency: "USD" as "USD" | "PKR" | "SAR",
     date: new Date().toISOString().split('T')[0],
   })
+  const [products, setProducts] = useState<{id: string, name: string}[]>([])
   const { showToast } = useToast()
 
   useEffect(() => {
     loadPurchases()
+    loadProducts()
   }, [])
 
   useEffect(() => {
@@ -66,6 +70,17 @@ export default function PurchasesPage() {
     }
   }
 
+  const loadProducts = async () => {
+    try {
+      const response = await fetch('/api/products')
+      const data = await response.json()
+      setProducts(data)
+    } catch (error) {
+      showToast("Failed to load products", "error")
+      console.error("Error loading products:", error)
+    }
+  }
+
   const filterPurchases = () => {
     if (!searchTerm) {
       setFilteredPurchases(purchases)
@@ -73,6 +88,7 @@ export default function PurchasesPage() {
       const filtered = purchases.filter(
         (purchase) =>
           purchase.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          purchase.item.toLowerCase().includes(searchTerm.toLowerCase()) ||
           purchase.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
           purchase.date.includes(searchTerm)
       )
@@ -83,7 +99,7 @@ export default function PurchasesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.supplier || !formData.description || !formData.amount || !formData.date || !formData.currency) {
+    if (!formData.supplier || !formData.item || !formData.description || !formData.amount || !formData.date || !formData.currency) {
       showToast("Please fill in all required fields", "error")
       return
     }
@@ -93,6 +109,7 @@ export default function PurchasesPage() {
     const purchaseData: Purchase = {
       id: editingPurchase ? editingPurchase.id : Date.now().toString(),
       supplier: formData.supplier,
+      item: formData.item,
       description: formData.description,
       amount: amount,
       currency: formData.currency,
@@ -121,6 +138,7 @@ export default function PurchasesPage() {
     setEditingPurchase(purchase)
     setFormData({
       supplier: purchase.supplier,
+      item: purchase.item,
       description: purchase.description,
       amount: (purchase.amount || 0).toString(),
       currency: purchase.currency || "USD",
@@ -151,6 +169,7 @@ export default function PurchasesPage() {
   const resetForm = () => {
     setFormData({
       supplier: "",
+      item: "",
       description: "",
       amount: "",
       currency: "USD",
@@ -195,6 +214,20 @@ export default function PurchasesPage() {
     }, 0)
     
     return convertCurrency(totalUSD, "USD", selectedCurrency)
+  }
+
+  const getCurrencyBreakdown = () => {
+    const breakdown = {
+      USD: 0,
+      PKR: 0,
+      SAR: 0
+    }
+    
+    purchases.forEach(purchase => {
+      breakdown[purchase.currency] += purchase.amount
+    })
+    
+    return breakdown
   }
 
   // Pagination logic
@@ -252,6 +285,37 @@ export default function PurchasesPage() {
           </div>
         </div>
 
+        {/* Currency Breakdown */}
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div>
+                <p className="text-sm font-medium text-blue-600">USD Total</p>
+                <p className="text-2xl font-bold text-blue-700">
+                  ${getCurrencyBreakdown().USD.toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4">
+              <div>
+                <p className="text-sm font-medium text-green-600">PKR Total</p>
+                <p className="text-2xl font-bold text-green-700">
+                  ₨{getCurrencyBreakdown().PKR.toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div>
+                <p className="text-sm font-medium text-purple-600">SAR Total</p>
+                <p className="text-2xl font-bold text-purple-700">
+                  ر.س{getCurrencyBreakdown().SAR.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Search and Table */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
@@ -260,7 +324,7 @@ export default function PurchasesPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by supplier, description, or date..."
+                placeholder="Search by supplier, item, description, or date..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -276,6 +340,9 @@ export default function PurchasesPage() {
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplier
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Item
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
@@ -294,7 +361,7 @@ export default function PurchasesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={7} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No purchase records found
                     </td>
                   </tr>
@@ -306,6 +373,9 @@ export default function PurchasesPage() {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {purchase.supplier}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {purchase.item}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
                         {purchase.description}
@@ -383,6 +453,24 @@ export default function PurchasesPage() {
                     placeholder="Enter supplier name"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   />
+                </div>
+                <div>
+                  <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
+                    Item *
+                  </label>
+                  <select
+                    id="item"
+                    value={formData.item}
+                    onChange={(e) => setFormData({ ...formData, item: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                  >
+                    <option value="">Select an item</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.name}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">

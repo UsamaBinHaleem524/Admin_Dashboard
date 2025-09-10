@@ -29,6 +29,8 @@ interface PurchaseOrder {
   id: string
   userDefinedId: string
   supplier: string
+  supplierAddress?: string
+  supplierPhone?: string
   date: string
   items: PurchaseOrderItem[]
   totalAmount: number
@@ -52,6 +54,8 @@ export default function PurchaseOrdersPage() {
   const [formData, setFormData] = useState({
     userDefinedId: "",
     supplier: "",
+    supplierAddress: "",
+    supplierPhone: "",
     date: new Date().toISOString().split('T')[0],
     items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
     currency: "USD" as "USD" | "PKR" | "SAR",
@@ -77,8 +81,17 @@ export default function PurchaseOrdersPage() {
       setLoading(true)
       const data = await purchaseOrdersAPI.getAll()
       setPurchaseOrders(data)
-    } catch (error) {
-      showToast("Failed to load purchase orders", "error")
+    } catch (error: any) {
+      // Extract error message from API response
+      let errorMessage = "Failed to load purchase orders"
+      
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error
+      }
+      
+      showToast(errorMessage, "error")
       console.error("Error loading purchase orders:", error)
     } finally {
       setLoading(false)
@@ -107,6 +120,8 @@ export default function PurchaseOrdersPage() {
         (po) =>
           po.userDefinedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           po.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (po.supplierAddress && po.supplierAddress.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (po.supplierPhone && po.supplierPhone.toLowerCase().includes(searchTerm.toLowerCase())) ||
           po.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
       setFilteredPurchaseOrders(filtered)
@@ -200,6 +215,8 @@ export default function PurchaseOrdersPage() {
       id: editingPurchaseOrder ? editingPurchaseOrder.id : "",
       userDefinedId: formData.userDefinedId,
       supplier: formData.supplier,
+      supplierAddress: formData.supplierAddress,
+      supplierPhone: formData.supplierPhone,
       date: formData.date,
       items: calculatedItems,
       totalAmount,
@@ -218,8 +235,17 @@ export default function PurchaseOrdersPage() {
       await loadPurchaseOrders()
       resetForm()
       setIsDialogOpen(false)
-    } catch (error) {
-      showToast("Failed to save purchase order", "error")
+    } catch (error: any) {
+      // Extract error message from API response
+      let errorMessage = "Failed to save purchase order"
+      
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error
+      }
+      
+      showToast(errorMessage, "error")
       console.error("Error saving purchase order:", error)
     }
   }
@@ -229,6 +255,8 @@ export default function PurchaseOrdersPage() {
     setFormData({
       userDefinedId: purchaseOrder.userDefinedId,
       supplier: purchaseOrder.supplier,
+      supplierAddress: purchaseOrder.supplierAddress || "",
+      supplierPhone: purchaseOrder.supplierPhone || "",
       date: purchaseOrder.date,
       items: purchaseOrder.items.map(item => {
         // Recalculate amount to ensure it's correct
@@ -251,8 +279,17 @@ export default function PurchaseOrdersPage() {
       await purchaseOrdersAPI.delete(id)
       await loadPurchaseOrders()
       showToast("Purchase order deleted successfully!", "success")
-    } catch (error) {
-      showToast("Failed to delete purchase order", "error")
+    } catch (error: any) {
+      // Extract error message from API response
+      let errorMessage = "Failed to delete purchase order"
+      
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error
+      }
+      
+      showToast(errorMessage, "error")
       console.error("Error deleting purchase order:", error)
     }
   }
@@ -314,7 +351,21 @@ export default function PurchaseOrdersPage() {
       // Supplier Information (Right side)
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
+      doc.text(po.supplier || 'Supplier Name', pageWidth - 80, 60, { align: "left" });
+      
+      doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
+      
+      // Add supplier address if available (same left position, with text wrapping)
+      if (po.supplierAddress) {
+        const addressLines = doc.splitTextToSize(po.supplierAddress, 60); // 60 units width for wrapping
+        doc.text(addressLines, pageWidth - 80, 70, { align: "left" });
+      }
+      
+      // Add supplier phone if available (aligned with name)
+      if (po.supplierPhone) {
+        doc.text(po.supplierPhone, pageWidth - 80, 77, { align: "left" });
+      }
   
       // Table Section
       let y = 110;
@@ -387,7 +438,7 @@ export default function PurchaseOrdersPage() {
       doc.line(10, y + 2, pageWidth - 10, y + 2);
   
       // Summary Section (Right side) - Fixed layout
-      const summaryX = pageWidth - 80;
+      const summaryX = pageWidth - 60;
       const summaryY = y + 10;
       
       doc.setFontSize(9);
@@ -420,6 +471,8 @@ export default function PurchaseOrdersPage() {
     setFormData({
       userDefinedId: "",
       supplier: "",
+      supplierAddress: "",
+      supplierPhone: "",
       date: new Date().toISOString().split('T')[0],
       items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
       currency: "USD",
@@ -465,7 +518,7 @@ export default function PurchaseOrdersPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by purchase order ID, supplier, or currency..."
+                placeholder="Search by PO ID, supplier, address, phone, or currency..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -473,7 +526,7 @@ export default function PurchaseOrdersPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] hidden md:table">
+            <table className="w-full min-w-[1200px] hidden md:table">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -481,6 +534,12 @@ export default function PurchaseOrdersPage() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplier
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Phone
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
@@ -491,8 +550,8 @@ export default function PurchaseOrdersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Currency
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Items
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[300px]">
+                    Items & Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -502,7 +561,7 @@ export default function PurchaseOrdersPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={9} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No purchase orders found
                     </td>
                   </tr>
@@ -515,6 +574,14 @@ export default function PurchaseOrdersPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.supplier}
                       </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base max-w-xs">
+                        <div className="truncate" title={po.supplierAddress || 'No address provided'}>
+                          {po.supplierAddress || '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {po.supplierPhone || '-'}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.date}
                       </td>
@@ -524,11 +591,15 @@ export default function PurchaseOrdersPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {po.currency}
                       </td>
-                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base min-w-[300px] max-w-[400px]">
                         <ul className="list-disc list-inside">
                           {po.items.map((item, index) => (
-                            <li key={index}>
-                              {item.itemName} (Qty: {item.quantity || 0}, {getCurrencySymbol(po.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, Total: {getCurrencySymbol(po.currency)}{(item.amount || 0).toFixed(2)})
+                            <li key={index} className="mb-1">
+                              <span className="font-medium">{item.itemName}</span>
+                              <br />
+                              <span className="text-xs text-gray-400">
+                                Qty: {item.quantity || 0} | {getCurrencySymbol(po.currency)}{(item.unitPrice || 0).toFixed(2)}/unit | Total: {getCurrencySymbol(po.currency)}{(item.amount || 0).toFixed(2)}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -572,6 +643,12 @@ export default function PurchaseOrdersPage() {
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{po.id}</p>
                         <p className="text-gray-500 text-sm">Supplier: {po.supplier}</p>
+                        {po.supplierAddress && (
+                          <p className="text-gray-500 text-sm">Address: {po.supplierAddress}</p>
+                        )}
+                        {po.supplierPhone && (
+                          <p className="text-gray-500 text-sm">Phone: {po.supplierPhone}</p>
+                        )}
                         <p className="text-gray-500 text-sm">Date: {po.date}</p>
                         <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{calculatePurchaseOrderTotal(po).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {po.currency}</p>
@@ -623,7 +700,7 @@ export default function PurchaseOrdersPage() {
         )}
 
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 !mt-0">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingPurchaseOrder ? "Edit Purchase Order" : "Add New Purchase Order"}
@@ -659,6 +736,32 @@ export default function PurchaseOrdersPage() {
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
                     placeholder="Supplier Name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="supplierAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                    Supplier Address
+                  </label>
+                  <textarea
+                    id="supplierAddress"
+                    value={formData.supplierAddress}
+                    onChange={(e) => setFormData({ ...formData, supplierAddress: e.target.value })}
+                    placeholder="Enter supplier address"
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="supplierPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                    Supplier Phone
+                  </label>
+                  <input
+                    id="supplierPhone"
+                    type="text"
+                    value={formData.supplierPhone}
+                    onChange={(e) => setFormData({ ...formData, supplierPhone: e.target.value })}
+                    placeholder="Enter supplier phone number"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
                 </div>

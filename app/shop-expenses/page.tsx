@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Plus, Edit, Trash2, Search } from "lucide-react"
+import { Plus, Edit, Trash2, Search, Calendar } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { shopExpensesAPI } from "@/lib/api"
@@ -12,7 +12,8 @@ import { Pagination } from "@/components/ui/pagination"
 
 interface ShopExpense {
   id: string
-  description: string
+  incomingDescription: string
+  outgoingDescription: string
   date: string
   previousAmount: number
   income: number
@@ -25,6 +26,7 @@ export default function ShopExpensesPage() {
   const [shopExpenses, setShopExpenses] = useState<ShopExpense[]>([])
   const [filteredShopExpenses, setFilteredShopExpenses] = useState<ShopExpense[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedDate, setSelectedDate] = useState("")
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR'>("USD")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
@@ -36,7 +38,8 @@ export default function ShopExpensesPage() {
     expense: null,
   })
   const [formData, setFormData] = useState({
-    description: "",
+    incomingDescription: "",
+    outgoingDescription: "",
     date: new Date().toISOString().split('T')[0],
     previousAmount: "",
     income: "",
@@ -51,11 +54,11 @@ export default function ShopExpensesPage() {
 
   useEffect(() => {
     filterShopExpenses()
-  }, [shopExpenses, searchTerm])
+  }, [shopExpenses, searchTerm, selectedDate])
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm])
+  }, [searchTerm, selectedDate])
 
   const loadShopExpenses = async () => {
     try {
@@ -71,23 +74,29 @@ export default function ShopExpensesPage() {
   }
 
   const filterShopExpenses = () => {
-    if (!searchTerm) {
-      setFilteredShopExpenses(shopExpenses)
-    } else {
-      const filtered = shopExpenses.filter(
+    let filtered = shopExpenses
+    
+    if (searchTerm) {
+      filtered = filtered.filter(
         (expense) =>
-          expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          expense.incomingDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          expense.outgoingDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
           expense.date.includes(searchTerm) ||
           expense.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
-      setFilteredShopExpenses(filtered)
     }
+    
+    if (selectedDate) {
+      filtered = filtered.filter(expense => expense.date === selectedDate)
+    }
+    
+    setFilteredShopExpenses(filtered)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.description || !formData.date || !formData.currency) {
+    if (!formData.date || !formData.currency) {
       showToast("Please fill in all required fields", "error")
       return
     }
@@ -98,7 +107,8 @@ export default function ShopExpensesPage() {
 
     const shopExpenseData: ShopExpense = {
       id: editingShopExpense ? editingShopExpense.id : Date.now().toString(),
-      description: formData.description,
+      incomingDescription: formData.incomingDescription,
+      outgoingDescription: formData.outgoingDescription,
       date: formData.date,
       previousAmount,
       income,
@@ -128,7 +138,8 @@ export default function ShopExpensesPage() {
   const handleEdit = (shopExpense: ShopExpense) => {
     setEditingShopExpense(shopExpense)
     setFormData({
-      description: shopExpense.description,
+      incomingDescription: shopExpense.incomingDescription || "",
+      outgoingDescription: shopExpense.outgoingDescription || "",
       date: shopExpense.date,
       previousAmount: (shopExpense.previousAmount || 0).toString(),
       income: (shopExpense.income || 0).toString(),
@@ -159,7 +170,8 @@ export default function ShopExpensesPage() {
 
   const resetForm = () => {
     setFormData({
-      description: "",
+      incomingDescription: "",
+      outgoingDescription: "",
       date: new Date().toISOString().split('T')[0],
       previousAmount: "",
       income: "",
@@ -206,21 +218,37 @@ export default function ShopExpensesPage() {
 
   // Calculate totals
   const getTotalIncome = () => {
-    return shopExpenses.reduce((sum, expense) => {
+    return filteredShopExpenses.reduce((sum, expense) => {
       return sum + convertToDisplayCurrency(expense.income, expense.currency)
     }, 0)
   }
 
   const getTotalOutgoing = () => {
-    return shopExpenses.reduce((sum, expense) => {
+    return filteredShopExpenses.reduce((sum, expense) => {
       return sum + convertToDisplayCurrency(expense.outgoingAmount, expense.currency)
     }, 0)
   }
 
   const getTotalCash = () => {
-    return shopExpenses.reduce((sum, expense) => {
+    return filteredShopExpenses.reduce((sum, expense) => {
       return sum + convertToDisplayCurrency(expense.totalCash, expense.currency)
     }, 0)
+  }
+
+  const getCurrencyBreakdown = () => {
+    const breakdown = {
+      income: { USD: 0, PKR: 0, SAR: 0 },
+      outgoing: { USD: 0, PKR: 0, SAR: 0 },
+      totalCash: { USD: 0, PKR: 0, SAR: 0 }
+    }
+    
+    filteredShopExpenses.forEach(expense => {
+      breakdown.income[expense.currency] += expense.income || 0
+      breakdown.outgoing[expense.currency] += expense.outgoingAmount || 0
+      breakdown.totalCash[expense.currency] += expense.totalCash || 0
+    })
+    
+    return breakdown
   }
 
   const calculateTotalCash = () => {
@@ -278,6 +306,114 @@ export default function ShopExpensesPage() {
           </div>
         </div>
 
+        {/* Currency Breakdown */}
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Income Breakdown */}
+            <div>
+              <h4 className="text-md font-medium text-green-600 mb-3">Income by Currency</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-blue-600">USD Income</p>
+                    <p className="text-xl font-bold text-blue-700">
+                      ${getCurrencyBreakdown().income.USD.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-green-600">PKR Income</p>
+                    <p className="text-xl font-bold text-green-700">
+                      ₨{getCurrencyBreakdown().income.PKR.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-purple-600">SAR Income</p>
+                    <p className="text-xl font-bold text-purple-700">
+                      ر.س{getCurrencyBreakdown().income.SAR.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Outgoing Breakdown */}
+            <div>
+              <h4 className="text-md font-medium text-red-600 mb-3">Outgoing by Currency</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-blue-600">USD Outgoing</p>
+                    <p className="text-xl font-bold text-blue-700">
+                      ${getCurrencyBreakdown().outgoing.USD.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-green-600">PKR Outgoing</p>
+                    <p className="text-xl font-bold text-green-700">
+                      ₨{getCurrencyBreakdown().outgoing.PKR.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-medium text-purple-600">SAR Outgoing</p>
+                    <p className="text-xl font-bold text-purple-700">
+                      ر.س{getCurrencyBreakdown().outgoing.SAR.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Total Cash Breakdown */}
+          <div className="mt-6">
+            <h4 className="text-md font-medium text-blue-600 mb-3">Total Cash by Currency</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div>
+                  <p className="text-sm font-medium text-blue-600">USD Cash</p>
+                  <p className={cn(
+                    "text-xl font-bold",
+                    getCurrencyBreakdown().totalCash.USD >= 0 ? "text-blue-700" : "text-red-700"
+                  )}>
+                    ${getCurrencyBreakdown().totalCash.USD.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4">
+                <div>
+                  <p className="text-sm font-medium text-green-600">PKR Cash</p>
+                  <p className={cn(
+                    "text-xl font-bold",
+                    getCurrencyBreakdown().totalCash.PKR >= 0 ? "text-green-700" : "text-red-700"
+                  )}>
+                    ₨{getCurrencyBreakdown().totalCash.PKR.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4">
+                <div>
+                  <p className="text-sm font-medium text-purple-600">SAR Cash</p>
+                  <p className={cn(
+                    "text-xl font-bold",
+                    getCurrencyBreakdown().totalCash.SAR >= 0 ? "text-purple-700" : "text-red-700"
+                  )}>
+                    ر.س{getCurrencyBreakdown().totalCash.SAR.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Currency Selector */}
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between">
@@ -299,15 +435,33 @@ export default function ShopExpensesPage() {
 
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
-            <div className="flex items-center space-x-2">
-              <Search className="h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by description, date, or currency..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-              />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                {selectedDate && (
+                  <button
+                    onClick={() => setSelectedDate("")}
+                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2 flex-1">
+                <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search by incoming/outgoing description, date, or currency..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                />
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -318,7 +472,10 @@ export default function ShopExpensesPage() {
                     Date
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
+                    Incoming Description
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Outgoing Description
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Previous Amount
@@ -343,13 +500,13 @@ export default function ShopExpensesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                       Loading...
                     </td>
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                       No shop expenses found
                     </td>
                   </tr>
@@ -360,7 +517,10 @@ export default function ShopExpensesPage() {
                         {expense.date}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900">
-                        {expense.description}
+                        {expense.incomingDescription || "-"}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900">
+                        {expense.outgoingDescription || "-"}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {getCurrencySymbol(expense.currency)}{(expense.previousAmount || 0).toFixed(2)}
@@ -417,7 +577,7 @@ export default function ShopExpensesPage() {
 
         {/* Add/Edit Dialog */}
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 !mt-0">
             <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
               <h2 className="text-lg font-semibold mb-4">
                 {editingShopExpense ? "Edit Shop Expense" : "Add Shop Expense"}
@@ -432,19 +592,6 @@ export default function ShopExpensesPage() {
                     value={formData.date}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter description"
                     required
                   />
                 </div>
@@ -478,6 +625,18 @@ export default function ShopExpensesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Incoming Description
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.incomingDescription}
+                    onChange={(e) => setFormData({ ...formData, incomingDescription: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter incoming description"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Outgoing Amount
                   </label>
                   <input
@@ -488,6 +647,18 @@ export default function ShopExpensesPage() {
                     onChange={(e) => setFormData({ ...formData, outgoingAmount: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Outgoing Description
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.outgoingDescription}
+                    onChange={(e) => setFormData({ ...formData, outgoingDescription: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter outgoing description"
                   />
                 </div>
                 <div>

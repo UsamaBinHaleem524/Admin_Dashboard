@@ -5,6 +5,17 @@ export async function GET() {
   try {
     await connectDB();
     const companyProfile = await CompanyProfile.findOne({}).sort({ createdAt: -1 });
+    
+    if (companyProfile) {
+      // Migration: Convert single contact to contacts array if needed
+      if (companyProfile.contact && !companyProfile.contacts) {
+        companyProfile.contacts = [companyProfile.contact];
+        // Remove the old contact field
+        delete companyProfile.contact;
+        await companyProfile.save();
+      }
+    }
+    
     return Response.json(companyProfile || {});
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

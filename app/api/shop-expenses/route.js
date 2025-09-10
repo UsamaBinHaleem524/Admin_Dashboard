@@ -14,7 +14,8 @@ const migrateOldData = async () => {
       // Convert old format to new format
       const newExpense = {
         id: oldExpense.id,
-        description: oldExpense.description || 'Migrated expense',
+        incomingDescription: '',
+        outgoingDescription: oldExpense.description || 'Migrated expense',
         date: oldExpense.date,
         previousAmount: 0,
         income: 0,
@@ -49,6 +50,8 @@ export async function GET() {
     // Ensure all expenses have the new fields with default values
     const processedExpenses = shopExpenses.map(expense => ({
       ...expense.toObject(),
+      incomingDescription: expense.incomingDescription || '',
+      outgoingDescription: expense.outgoingDescription || '',
       previousAmount: expense.previousAmount || 0,
       income: expense.income || 0,
       outgoingAmount: expense.outgoingAmount || 0,
@@ -68,8 +71,8 @@ export async function POST(request) {
     const data = await request.json();
     
     // Validate required fields
-    if (!data.description || !data.date || !data.currency) {
-      return Response.json({ error: 'Missing required fields: description, date, currency' }, { status: 400 });
+    if (!data.date || !data.currency) {
+      return Response.json({ error: 'Missing required fields: date, currency' }, { status: 400 });
     }
     
     // Calculate total cash: (Previous Amount + Income) - Outgoing Amount
@@ -80,6 +83,8 @@ export async function POST(request) {
     
     const shopExpense = new ShopExpense({
       ...data,
+      incomingDescription: data.incomingDescription || '',
+      outgoingDescription: data.outgoingDescription || '',
       previousAmount,
       income,
       outgoingAmount,
@@ -100,8 +105,8 @@ export async function PUT(request) {
     const data = await request.json();
     
     // Validate required fields
-    if (!data.description || !data.date || !data.currency) {
-      return Response.json({ error: 'Missing required fields: description, date, currency' }, { status: 400 });
+    if (!data.date || !data.currency) {
+      return Response.json({ error: 'Missing required fields: date, currency' }, { status: 400 });
     }
     
     // Calculate total cash: (Previous Amount + Income) - Outgoing Amount
@@ -114,6 +119,8 @@ export async function PUT(request) {
       { id: data.id },
       { 
         ...data,
+        incomingDescription: data.incomingDescription || '',
+        outgoingDescription: data.outgoingDescription || '',
         previousAmount,
         income,
         outgoingAmount,

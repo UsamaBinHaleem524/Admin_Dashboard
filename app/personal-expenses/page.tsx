@@ -105,7 +105,7 @@ export default function PersonalExpensesPage() {
   }
 
   const getTotalAmount = () => {
-    return calculateTotalAmount(personalExpenses)
+    return calculateTotalAmount(filteredExpenses)
   }
 
   const convertToDisplayCurrency = (amount: number, fromCurrency: 'USD' | 'PKR' | 'SAR') => {
@@ -128,9 +128,23 @@ export default function PersonalExpensesPage() {
   }
 
   const getConvertedTotalAmount = () => {
-    return personalExpenses.reduce((sum, expense) => {
+    return filteredExpenses.reduce((sum, expense) => {
       return sum + convertToDisplayCurrency(expense.amount, expense.currency)
     }, 0)
+  }
+
+  const getCurrencyBreakdown = () => {
+    const breakdown = {
+      USD: 0,
+      PKR: 0,
+      SAR: 0
+    }
+    
+    filteredExpenses.forEach(expense => {
+      breakdown[expense.currency] += expense.amount
+    })
+    
+    return breakdown
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -212,9 +226,6 @@ export default function PersonalExpensesPage() {
     setIsDialogOpen(true)
   }
 
-  const clearDateFilter = () => {
-    setSelectedDate("")
-  }
 
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage
@@ -244,50 +255,46 @@ export default function PersonalExpensesPage() {
           </button>
         </div>
 
-        {/* Total Amounts Display */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Daily Total */}
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Daily Total</h3>
-              <Calendar className="h-5 w-5 text-gray-400" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-600">Total Amount</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {getCurrencySymbol(displayCurrency)}{getConvertedTotalAmount().toFixed(2)}
+              </p>
             </div>
-            <div className="flex items-center justify-between mb-4">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-              {selectedDate && (
-                <button
-                  onClick={clearDateFilter}
-                  className="text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <p className="text-3xl font-bold text-blue-600">
-              {getCurrencySymbol(displayCurrency)}{getConvertedDailyTotal().toFixed(2)}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              {selectedDate ? `Total for ${selectedDate}` : "Select a date to see daily total"}
-            </p>
           </div>
+        </div>
 
-          {/* Total Amount */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Total Amount</h3>
-              <div className="h-5 w-5 bg-green-500 rounded-full"></div>
+        {/* Currency Breakdown */}
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div>
+                <p className="text-sm font-medium text-blue-600">USD Total</p>
+                <p className="text-2xl font-bold text-blue-700">
+                  ${getCurrencyBreakdown().USD.toFixed(2)}
+                </p>
+              </div>
             </div>
-            <p className="text-3xl font-bold text-green-600">
-              {getCurrencySymbol(displayCurrency)}{getConvertedTotalAmount().toFixed(2)}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              Total personal expenses to date
-            </p>
+            <div className="bg-green-50 rounded-lg p-4">
+              <div>
+                <p className="text-sm font-medium text-green-600">PKR Total</p>
+                <p className="text-2xl font-bold text-green-700">
+                  ₨{getCurrencyBreakdown().PKR.toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div>
+                <p className="text-sm font-medium text-purple-600">SAR Total</p>
+                <p className="text-2xl font-bold text-purple-700">
+                  ر.س{getCurrencyBreakdown().SAR.toFixed(2)}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -314,15 +321,33 @@ export default function PersonalExpensesPage() {
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Personal Expense Records</h3>
-            <div className="flex items-center space-x-2">
-              <Search className="h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by description or date..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-              />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                {selectedDate && (
+                  <button
+                    onClick={() => setSelectedDate("")}
+                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2 flex-1">
+                <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search by description or date..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                />
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">

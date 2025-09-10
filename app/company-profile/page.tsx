@@ -11,9 +11,10 @@ import { DeleteModal } from "@/components/ui/delete-modal"
 interface CompanyProfile {
   id: string
   name: string
-  contact: string
+  contacts: string[]
   email: string
   address: string
+  logo: string
 }
 
 export default function CompanyProfilePage() {
@@ -27,9 +28,10 @@ export default function CompanyProfilePage() {
   })
   const [formData, setFormData] = useState({
     name: "",
-    contact: "",
+    contacts: [""],
     email: "",
     address: "",
+    logo: "/logo.jpeg",
   })
   const { showToast } = useToast()
 
@@ -54,7 +56,10 @@ export default function CompanyProfilePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.name || !formData.contact || !formData.email || !formData.address) {
+    // Filter out empty contacts
+    const validContacts = formData.contacts.filter(contact => contact.trim() !== "")
+    
+    if (!formData.name || validContacts.length === 0 || !formData.email || !formData.address) {
       showToast("Please fill in all fields", "error")
       return
     }
@@ -62,9 +67,10 @@ export default function CompanyProfilePage() {
     const profileData: CompanyProfile = {
       id: editingProfile ? editingProfile.id : `COMP-${Date.now().toString().slice(-6)}`,
       name: formData.name,
-      contact: formData.contact,
+      contacts: validContacts,
       email: formData.email,
       address: formData.address,
+      logo: formData.logo,
     }
 
     try {
@@ -89,9 +95,10 @@ export default function CompanyProfilePage() {
     setEditingProfile(profile)
     setFormData({
       name: profile.name,
-      contact: profile.contact,
+      contacts: profile.contacts && profile.contacts.length > 0 ? profile.contacts : [""],
       email: profile.email,
       address: profile.address,
+      logo: profile.logo || "/logo.jpeg",
     })
     setIsDialogOpen(true)
   }
@@ -116,8 +123,25 @@ export default function CompanyProfilePage() {
   }
 
   const resetForm = () => {
-    setFormData({ name: "", contact: "", email: "", address: "" })
+    setFormData({ name: "", contacts: [""], email: "", address: "", logo: "/logo.jpeg" })
     setEditingProfile(null)
+  }
+
+  const addContact = () => {
+    setFormData({ ...formData, contacts: [...formData.contacts, ""] })
+  }
+
+  const removeContact = (index: number) => {
+    if (formData.contacts.length > 1) {
+      const newContacts = formData.contacts.filter((_, i) => i !== index)
+      setFormData({ ...formData, contacts: newContacts })
+    }
+  }
+
+  const updateContact = (index: number, value: string) => {
+    const newContacts = [...formData.contacts]
+    newContacts[index] = value
+    setFormData({ ...formData, contacts: newContacts })
   }
 
   const openAddDialog = () => {
@@ -156,15 +180,44 @@ export default function CompanyProfilePage() {
               </div>
             ) : companyProfile ? (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Company Logo */}
+                  <div className="flex justify-center md:justify-start">
+                    <div className="relative">
+                      <img
+                        src={companyProfile.logo || "/logo.jpeg"}
+                        alt={`${companyProfile.name} Logo`}
+                        className="w-24 h-24 object-contain rounded-lg border border-gray-200 shadow-sm"
+                        onError={(e) => {
+                          e.currentTarget.src = "/placeholder-logo.png"
+                        }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Company Details */}
+                  <div className="md:col-span-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
                       <p className="text-gray-900 text-sm sm:text-base">{companyProfile.name}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                      <p className="text-gray-900 text-sm sm:text-base">{companyProfile.contact}</p>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {companyProfile.contacts && companyProfile.contacts.length > 1 ? "Contacts" : "Contact"}
+                      </label>
+                      <div className="space-y-1">
+                        {companyProfile.contacts && companyProfile.contacts.length > 0 ? (
+                          companyProfile.contacts.map((contact, index) => (
+                            <p key={index} className="text-gray-900 text-sm sm:text-base">
+                              {contact}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="text-gray-900 text-sm sm:text-base">No contacts available</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -175,6 +228,8 @@ export default function CompanyProfilePage() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                       <p className="text-gray-900 text-sm sm:text-base">{companyProfile.address}</p>
+                    </div>
+                  </div>
                     </div>
                   </div>
                 </div>
@@ -236,17 +291,39 @@ export default function CompanyProfilePage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact" className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Contacts
                   </label>
-                  <input
-                    id="contact"
-                    type="text"
-                    value={formData.contact}
-                    onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                    placeholder="Enter contact number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
+                  <div className="space-y-2">
+                    {formData.contacts.map((contact, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={contact}
+                          onChange={(e) => updateContact(index, e.target.value)}
+                          placeholder="Enter contact number"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                        />
+                        {formData.contacts.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeContact(index)}
+                            className="px-2 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addContact}
+                      className="flex items-center px-3 py-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors text-sm"
+                    >
+                      <Plus className="mr-1 h-4 w-4" />
+                      Add Contact
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">

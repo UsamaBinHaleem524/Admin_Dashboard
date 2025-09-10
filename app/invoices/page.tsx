@@ -20,7 +20,6 @@ interface Product {
 
 interface InvoiceItem {
   itemName: string
-  description: string
   quantity: number
   unit: string
   unitPrice: number
@@ -31,6 +30,9 @@ interface InvoiceItem {
 interface Invoice {
   id: string
   userDefinedId: string
+  customer: string
+  customerAddress?: string
+  customerPhone?: string
   date: string
   invoiceType: "Simple" | "Proforma"
   items: InvoiceItem[]
@@ -54,9 +56,12 @@ export default function InvoicesPage() {
   })
   const [formData, setFormData] = useState({
     userDefinedId: "",
+    customer: "",
+    customerAddress: "",
+    customerPhone: "",
     date: new Date().toISOString().split('T')[0],
     invoiceType: "Simple" as "Simple" | "Proforma",
-    items: [{ itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+    items: [{ itemName: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
     currency: "USD" as "USD" | "PKR" | "SAR",
   })
   const { showToast } = useToast()
@@ -108,11 +113,13 @@ export default function InvoicesPage() {
       const filtered = invoices.filter(
         (inv) =>
           inv.userDefinedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          inv.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (inv.customerAddress && inv.customerAddress.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (inv.customerPhone && inv.customerPhone.toLowerCase().includes(searchTerm.toLowerCase())) ||
           inv.invoiceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.items.some(item => 
-            item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.description.toLowerCase().includes(searchTerm.toLowerCase())
+            item.itemName.toLowerCase().includes(searchTerm.toLowerCase())
           )
       )
       setFilteredInvoices(filtered)
@@ -122,7 +129,7 @@ export default function InvoicesPage() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+      items: [...formData.items, { itemName: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
     })
   }
 
@@ -190,7 +197,12 @@ export default function InvoicesPage() {
       return
     }
 
-    if (formData.items.some(item => !item.itemName || !item.description || !item.quantity || !item.unit || !item.unitPrice || !item.vatPercentage)) {
+    if (!formData.customer) {
+      showToast("Please enter a customer name", "error")
+      return
+    }
+
+    if (formData.items.some(item => !item.itemName || !item.quantity || !item.unit || !item.unitPrice || !item.vatPercentage)) {
       showToast("Please fill in all required fields for all items", "error")
       return
     }
@@ -211,7 +223,6 @@ export default function InvoicesPage() {
       
       return {
         itemName: item.itemName,
-        description: item.description,
         quantity,
         unit: item.unit,
         unitPrice,
@@ -225,6 +236,9 @@ export default function InvoicesPage() {
     const invoiceData: Invoice = {
       id: editingInvoice ? editingInvoice.id : "",
       userDefinedId: formData.userDefinedId,
+      customer: formData.customer,
+      customerAddress: formData.customerAddress,
+      customerPhone: formData.customerPhone,
       date: formData.date,
       invoiceType: formData.invoiceType,
       items: calculatedItems,
@@ -254,6 +268,9 @@ export default function InvoicesPage() {
     setEditingInvoice(invoice)
     setFormData({
       userDefinedId: invoice.userDefinedId,
+      customer: invoice.customer,
+      customerAddress: invoice.customerAddress || "",
+      customerPhone: invoice.customerPhone || "",
       date: invoice.date,
       invoiceType: invoice.invoiceType,
       items: invoice.items.map(item => {
@@ -264,7 +281,6 @@ export default function InvoicesPage() {
         
         return {
           itemName: item.itemName,
-          description: item.description,
           quantity: item.quantity.toString(),
           unit: item.unit,
           unitPrice: item.unitPrice.toString(),
@@ -341,10 +357,25 @@ export default function InvoicesPage() {
       doc.text(companyProfile.contact || 'Contact Person', 15, 70);
       doc.text(companyProfile.address || 'Company Address', 15, 77);
       doc.text(companyProfile.email || 'Phone Number', 15, 84);
-  
-      // Receiver Information (Right side)
-      const receiverY = 60;
-      doc.setFontSize(12);
+
+      // Customer Information (Right side) - with equal vertical spacing
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(inv.customer || 'Customer Name', pageWidth - 80, 66, { align: "left" });
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      
+      // Add customer address if available with proper spacing
+      if (inv.customerAddress) {
+        const addressLines = doc.splitTextToSize(inv.customerAddress, 60); // 60 units width for wrapping
+        doc.text(addressLines, pageWidth - 80, 72, { align: "left" });
+      }
+      
+      // Add customer phone if available with proper spacing
+      if (inv.customerPhone) {
+        doc.text(inv.customerPhone, pageWidth - 80, 82, { align: "left" });
+      }
   
       // Table Section
       let y = 110;
@@ -369,7 +400,7 @@ export default function InvoicesPage() {
       doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
       
       doc.text("Row no.", colX.rowNo, y - 2);
-      doc.text("Description", colX.description, y - 2);
+      doc.text("Item Name", colX.description, y - 2);
       doc.text("Date", colX.date, y - 2);
       doc.text("Qty", colX.qty, y - 2, { align: "right" });
       doc.text("Unit", colX.unit, y - 2);
@@ -398,7 +429,7 @@ export default function InvoicesPage() {
                  doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
 
                  doc.text("Row no.", colX.rowNo, y - 2);
-                 doc.text("Description", colX.description, y - 2);
+                 doc.text("Item Name", colX.description, y - 2);
                  doc.text("Date", colX.date, y - 2);
                  doc.text("Qty", colX.qty, y - 2, { align: "right" });
                  doc.text("Unit", colX.unit, y - 2);
@@ -434,24 +465,28 @@ export default function InvoicesPage() {
       doc.setLineWidth(0.5);
       doc.line(10, y + 2, pageWidth - 10, y + 2);
   
-      // Summary Section (Right side) - Fixed layout
-      const summaryX = pageWidth - 80;
+      // Summary Section (Right side) - Compact layout with proper alignment
       const summaryY = y + 10;
+      const summaryStartX = pageWidth - 45; // Start of summary section
+      const labelX = summaryStartX; // Labels start here
+      const valueX = pageWidth - 15; // Values end here (right margin)
       
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       
-      doc.text("Subtotal:", summaryX, summaryY);
-      doc.text("Total excl. VAT:", summaryX, summaryY + 8);
-      doc.text("VAT Amount:", summaryX, summaryY + 16);
-      doc.text("Total amount due:", summaryX, summaryY + 24);
+      // Labels aligned to the right within the summary section
+      doc.text("Subtotal:", labelX, summaryY, { align: "right" });
+      doc.text("Total excl. VAT:", labelX, summaryY + 8, { align: "right" });
+      doc.text("VAT Amount:", labelX, summaryY + 16, { align: "right" });
+      doc.text("Total amount due:", labelX, summaryY + 24, { align: "right" });
       
+      // Values aligned to the right edge
       doc.setFont("helvetica", "normal");
       const finalTotal = calculateInvoiceTotal(inv);
-      doc.text(`US$${subtotal.toFixed(2)}`, summaryX + 50, summaryY, { align: "right" });
-      doc.text(`US$${subtotal.toFixed(2)}`, summaryX + 50, summaryY + 8, { align: "right" });
-      doc.text(`US$${totalVAT.toFixed(2)}`, summaryX + 50, summaryY + 16, { align: "right" });
-      doc.text(`US$${finalTotal.toFixed(2)}`, summaryX + 50, summaryY + 24, { align: "right" });
+      doc.text(`US$${subtotal.toFixed(2)}`, valueX, summaryY, { align: "right" });
+      doc.text(`US$${subtotal.toFixed(2)}`, valueX, summaryY + 8, { align: "right" });
+      doc.text(`US$${totalVAT.toFixed(2)}`, valueX, summaryY + 16, { align: "right" });
+      doc.text(`US$${finalTotal.toFixed(2)}`, valueX, summaryY + 24, { align: "right" });
   
       // Footer - Centered with proper styling
       const footerY = pageHeight - 20;
@@ -473,9 +508,12 @@ export default function InvoicesPage() {
   const resetForm = () => {
     setFormData({
       userDefinedId: "",
+      customer: "",
+      customerAddress: "",
+      customerPhone: "",
       date: new Date().toISOString().split('T')[0],
       invoiceType: "Simple" as "Simple" | "Proforma",
-      items: [{ itemName: "", description: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
+      items: [{ itemName: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
       currency: "USD",
     })
     setEditingInvoice(null)
@@ -519,7 +557,7 @@ export default function InvoicesPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by invoice ID, type, item name"
+                placeholder="Search by invoice ID, customer, address, phone, type, item name"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -527,11 +565,20 @@ export default function InvoicesPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] hidden md:table">
+            <table className="w-full min-w-[1200px] hidden md:table">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Invoice ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Phone
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Type
@@ -545,8 +592,8 @@ export default function InvoicesPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Currency
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Items
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[300px]">
+                    Items & Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -556,7 +603,7 @@ export default function InvoicesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No invoices found
                     </td>
                   </tr>
@@ -565,6 +612,17 @@ export default function InvoicesPage() {
                     <tr key={inv.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {inv.userDefinedId}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {inv.customer}
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base max-w-[200px]">
+                        <div className="truncate" title={inv.customerAddress || "-"}>
+                          {inv.customerAddress || "-"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {inv.customerPhone || "-"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {inv.invoiceType}
@@ -578,11 +636,14 @@ export default function InvoicesPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {inv.currency}
                       </td>
-                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base">
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base min-w-[300px] max-w-[400px]">
                         <ul className="list-disc list-inside">
                           {inv.items.map((item, index) => (
-                            <li key={index}>
-                              {item.itemName} - {item.description} (Qty: {item.quantity || 0} {item.unit}, {getCurrencySymbol(inv.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, VAT: {item.vatPercentage || 0}%, Total: {getCurrencySymbol(inv.currency)}{(item.amount || 0).toFixed(2)})
+                            <li key={index} className="mb-1">
+                              <span className="font-medium">{item.itemName}</span><br />
+                              <span className="text-xs text-gray-400">
+                                Qty: {item.quantity || 0} {item.unit} | {getCurrencySymbol(inv.currency)}{(item.unitPrice || 0).toFixed(2)}/unit | VAT: {item.vatPercentage || 0}% | Total: {getCurrencySymbol(inv.currency)}{(item.amount || 0).toFixed(2)}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -624,7 +685,10 @@ export default function InvoicesPage() {
                   <div key={inv.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{inv.id}</p>
+                        <p className="font-medium text-gray-900 text-sm">{inv.userDefinedId}</p>
+                        <p className="text-gray-500 text-sm">Customer: {inv.customer}</p>
+                        <p className="text-gray-500 text-sm">Address: {inv.customerAddress || "-"}</p>
+                        <p className="text-gray-500 text-sm">Phone: {inv.customerPhone || "-"}</p>
                         <p className="text-gray-500 text-sm">Type: {inv.invoiceType}</p>
                         <p className="text-gray-500 text-sm">Date: {inv.date}</p>
                         <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{calculateInvoiceTotal(inv).toFixed(2)}</p>
@@ -632,7 +696,7 @@ export default function InvoicesPage() {
                         <ul className="list-disc list-inside text-gray-500 text-sm">
                           {inv.items.map((item, index) => (
                             <li key={index}>
-                              {item.itemName} - {item.description} (Qty: {item.quantity || 0} {item.unit}, {getCurrencySymbol(inv.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, VAT: {item.vatPercentage || 0}%, Total: {getCurrencySymbol(inv.currency)}{(item.amount || 0).toFixed(2)})
+                              {item.itemName} (Qty: {item.quantity || 0} {item.unit}, {getCurrencySymbol(inv.currency)}{(item.unitPrice || 0).toFixed(2)}/unit, VAT: {item.vatPercentage || 0}%, Total: {getCurrencySymbol(inv.currency)}{(item.amount || 0).toFixed(2)})
                             </li>
                           ))}
                         </ul>
@@ -677,7 +741,7 @@ export default function InvoicesPage() {
         )}
 
         {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 !mt-0">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg sm:text-xl font-semibold mb-4">
                 {editingInvoice ? "Edit Invoice" : "Add New Invoice"}
@@ -700,6 +764,45 @@ export default function InvoicesPage() {
                       setFormData({ ...formData, userDefinedId: value });
                     }}
                     placeholder="Enter invoice ID (INV- will be added automatically)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer
+                  </label>
+                  <input
+                    id="customer"
+                    type="text"
+                    value={formData.customer}
+                    onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
+                    placeholder="Customer Name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="customerAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Address
+                  </label>
+                  <textarea
+                    id="customerAddress"
+                    value={formData.customerAddress}
+                    onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                    placeholder="Enter customer address"
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="customerPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Phone
+                  </label>
+                  <input
+                    id="customerPhone"
+                    type="text"
+                    value={formData.customerPhone}
+                    onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                    placeholder="Enter customer phone number"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
                 </div>
@@ -766,19 +869,6 @@ export default function InvoicesPage() {
                               </option>
                             ))}
                           </select>
-                        </div>
-                        <div>
-                          <label htmlFor={`description-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
-                            Description
-                          </label>
-                          <input
-                            id={`description-${index}`}
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => handleItemChange(index, "description", e.target.value)}
-                            placeholder="Description"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          />
                         </div>
                         <div>
                           <label htmlFor={`quantity-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
