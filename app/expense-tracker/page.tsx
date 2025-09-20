@@ -22,7 +22,9 @@ export default function ExpenseTrackerPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [filteredExpenses, setFilteredExpenses] = useState<Expense[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedDate, setSelectedDate] = useState("")
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedMonth, setSelectedMonth] = useState("")
+  const [selectedYear, setSelectedYear] = useState("")
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR'>("USD")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
@@ -47,11 +49,11 @@ export default function ExpenseTrackerPage() {
 
   useEffect(() => {
     filterExpenses()
-  }, [expenses, searchTerm, selectedDate])
+  }, [expenses, searchTerm, selectedDate, selectedMonth, selectedYear])
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedDate])
+  }, [searchTerm, selectedDate, selectedMonth, selectedYear])
 
   const loadExpenses = async () => {
     try {
@@ -79,6 +81,22 @@ export default function ExpenseTrackerPage() {
     
     if (selectedDate) {
       filtered = filtered.filter(expense => expense.date === selectedDate)
+    }
+    
+    if (selectedMonth) {
+      filtered = filtered.filter(expense => {
+        const expenseDate = new Date(expense.date)
+        const expenseMonth = expenseDate.getMonth() + 1 // getMonth() returns 0-11, so add 1
+        return expenseMonth.toString() === selectedMonth
+      })
+    }
+    
+    if (selectedYear) {
+      filtered = filtered.filter(expense => {
+        const expenseDate = new Date(expense.date)
+        const expenseYear = expenseDate.getFullYear().toString()
+        return expenseYear === selectedYear
+      })
     }
     
     setFilteredExpenses(filtered)
@@ -309,23 +327,85 @@ export default function ExpenseTrackerPage() {
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Expense Records</h3>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-                {selectedDate && (
-                  <button
-                    onClick={() => setSelectedDate("")}
-                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            <div className="flex flex-col space-y-4">
+              {/* Date Filters Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <label className="text-sm font-medium text-gray-700">Date:</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  {selectedDate && (
+                    <button
+                      onClick={() => setSelectedDate("")}
+                      className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <label className="text-sm font-medium text-gray-700">Month:</label>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   >
-                    Reset
-                  </button>
-                )}
+                    <option value="">All Months</option>
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                  {selectedMonth && (
+                    <button
+                      onClick={() => setSelectedMonth("")}
+                      className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <label className="text-sm font-medium text-gray-700">Year:</label>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">All Years</option>
+                    <option value="2020">2020</option>
+                    <option value="2021">2021</option>
+                    <option value="2022">2022</option>
+                    <option value="2023">2023</option>
+                    <option value="2024">2024</option>
+                    <option value="2025">2025</option>
+                  </select>
+                  {selectedYear && (
+                    <button
+                      onClick={() => setSelectedYear("")}
+                      className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Search Row */}
               <div className="flex items-center space-x-2 flex-1">
                 <Search className="h-4 w-4 text-gray-400" />
                 <input
@@ -339,55 +419,55 @@ export default function ExpenseTrackerPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[800px] border-collapse border border-gray-300">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Date
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Description
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Amount
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Currency
                   </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
                       Loading...
                     </td>
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    <td colSpan={5} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
                       No expenses found
                     </td>
                   </tr>
                 ) : (
                   currentItems.map((expense) => (
                     <tr key={expense.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base border border-gray-300">
                         {expense.date}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
+                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base border border-gray-300">
                         {expense.description}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base border border-gray-300">
                         {getCurrencySymbol(expense.currency)}{expense.amount.toFixed(2)}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base border border-gray-300">
                         {expense.currency}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleEdit(expense)}

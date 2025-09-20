@@ -38,6 +38,14 @@ interface Invoice {
   items: InvoiceItem[]
   totalAmount: number
   currency: "USD" | "PKR" | "SAR"
+  termsAndConditions?: string
+  beneficiaryName?: string
+  beneficiaryAddress?: string
+  bankName?: string
+  bankAddress?: string
+  swiftBic?: string
+  accountNumber?: string
+  intermediaryBank?: string
 }
 
 export default function InvoicesPage() {
@@ -63,6 +71,14 @@ export default function InvoicesPage() {
     invoiceType: "Simple" as "Simple" | "Proforma",
     items: [{ itemName: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
     currency: "USD" as "USD" | "PKR" | "SAR",
+    termsAndConditions: "",
+    beneficiaryName: "",
+    beneficiaryAddress: "",
+    bankName: "",
+    bankAddress: "",
+    swiftBic: "",
+    accountNumber: "",
+    intermediaryBank: "",
   })
   const { showToast } = useToast()
 
@@ -244,6 +260,14 @@ export default function InvoicesPage() {
       items: calculatedItems,
       totalAmount,
       currency: formData.currency,
+      termsAndConditions: formData.termsAndConditions,
+      beneficiaryName: formData.beneficiaryName,
+      beneficiaryAddress: formData.beneficiaryAddress,
+      bankName: formData.bankName,
+      bankAddress: formData.bankAddress,
+      swiftBic: formData.swiftBic,
+      accountNumber: formData.accountNumber,
+      intermediaryBank: formData.intermediaryBank,
     }
 
     try {
@@ -289,6 +313,14 @@ export default function InvoicesPage() {
         }
       }),
       currency: invoice.currency,
+      termsAndConditions: invoice.termsAndConditions || "",
+      beneficiaryName: invoice.beneficiaryName || "",
+      beneficiaryAddress: invoice.beneficiaryAddress || "",
+      bankName: invoice.bankName || "",
+      bankAddress: invoice.bankAddress || "",
+      swiftBic: invoice.swiftBic || "",
+      accountNumber: invoice.accountNumber || "",
+      intermediaryBank: invoice.intermediaryBank || "",
     })
     setIsDialogOpen(true)
   }
@@ -399,14 +431,14 @@ export default function InvoicesPage() {
       doc.setFillColor(240, 240, 240);
       doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
       
-      doc.text("Row no.", colX.rowNo, y - 2);
-      doc.text("Item Name", colX.description, y - 2);
-      doc.text("Date", colX.date, y - 2);
-      doc.text("Qty", colX.qty, y - 2, { align: "right" });
-      doc.text("Unit", colX.unit, y - 2);
-      doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
-      doc.text("VAT %", colX.vat, y - 2, { align: "right" });
-      doc.text("Total", colX.total, y - 2, { align: "right" });
+      doc.text("Row no.", colX.rowNo, y - 2, { underline: true });
+      doc.text("Item Name", colX.description, y - 2, { underline: true });
+      doc.text("Date", colX.date, y - 2, { underline: true });
+      doc.text("Qty", colX.qty, y - 2, { align: "right", underline: true });
+      doc.text("Unit", colX.unit, y - 2, { underline: true });
+      doc.text("Unit price", colX.unitPrice, y - 2, { align: "right", underline: true });
+      doc.text("VAT %", colX.vat, y - 2, { align: "right", underline: true });
+      doc.text("Total", colX.total, y - 2, { align: "right", underline: true });
   
       y += 8;
   
@@ -428,14 +460,14 @@ export default function InvoicesPage() {
                  doc.setFillColor(240, 240, 240);
                  doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
 
-                 doc.text("Row no.", colX.rowNo, y - 2);
-                 doc.text("Item Name", colX.description, y - 2);
-                 doc.text("Date", colX.date, y - 2);
-                 doc.text("Qty", colX.qty, y - 2, { align: "right" });
-                 doc.text("Unit", colX.unit, y - 2);
-                 doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
-                 doc.text("VAT %", colX.vat, y - 2, { align: "right" });
-                 doc.text("Total", colX.total, y - 2, { align: "right" });
+                 doc.text("Row no.", colX.rowNo, y - 2, { underline: true });
+                 doc.text("Item Name", colX.description, y - 2, { underline: true });
+                 doc.text("Date", colX.date, y - 2, { underline: true });
+                 doc.text("Qty", colX.qty, y - 2, { align: "right", underline: true });
+                 doc.text("Unit", colX.unit, y - 2, { underline: true });
+                 doc.text("Unit price", colX.unitPrice, y - 2, { align: "right", underline: true });
+                 doc.text("VAT %", colX.vat, y - 2, { align: "right", underline: true });
+                 doc.text("Total", colX.total, y - 2, { align: "right", underline: true });
                  y += 8;
                  doc.setFontSize(8);
                  doc.setFont("helvetica", "normal");
@@ -487,9 +519,64 @@ export default function InvoicesPage() {
       doc.text(`US$${subtotal.toFixed(2)}`, valueX, summaryY + 8, { align: "right" });
       doc.text(`US$${totalVAT.toFixed(2)}`, valueX, summaryY + 16, { align: "right" });
       doc.text(`US$${finalTotal.toFixed(2)}`, valueX, summaryY + 24, { align: "right" });
+
+      // Terms and Conditions Section
+      let currentY = summaryY + 35;
+      if (inv.termsAndConditions) {
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text("TERMS AND CONDITIONS:", 10, currentY);
+        currentY += 8;
+        doc.setFont("helvetica", "normal");
+        const termsLines = doc.splitTextToSize(inv.termsAndConditions, pageWidth - 20);
+        termsLines.forEach((line: string) => {
+          doc.text(line, 10, currentY);
+          currentY += 5;
+        });
+        currentY += 5;
+      }
+
+      // Bank Details Section
+      if (inv.beneficiaryName || inv.bankName || inv.accountNumber || inv.swiftBic) {
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text("BANK DETAILS:", 10, currentY);
+        currentY += 8;
+        doc.setFont("helvetica", "normal");
+        
+        if (inv.beneficiaryName) {
+          doc.text(`BENEFICIARY'S NAME: ${inv.beneficiaryName}`, 10, currentY);
+          currentY += 5;
+        }
+        if (inv.beneficiaryAddress) {
+          doc.text(`BENEFICIARY'S ADDRESS: ${inv.beneficiaryAddress}`, 10, currentY);
+          currentY += 5;
+        }
+        if (inv.bankName) {
+          doc.text(`BANK NAME: ${inv.bankName}`, 10, currentY);
+          currentY += 5;
+        }
+        if (inv.bankAddress) {
+          doc.text(`BANK ADDRESS: ${inv.bankAddress}`, 10, currentY);
+          currentY += 5;
+        }
+        if (inv.swiftBic) {
+          doc.text(`SWIFT BIC: ${inv.swiftBic}`, 10, currentY);
+          currentY += 5;
+        }
+        if (inv.accountNumber) {
+          doc.text(`USD ACCOUNT NUMBER: ${inv.accountNumber}`, 10, currentY);
+          currentY += 5;
+        }
+        if (inv.intermediaryBank) {
+          doc.text(`INTERMEDIARY BANK (if you need): ${inv.intermediaryBank}`, 10, currentY);
+          currentY += 5;
+        }
+        currentY += 5;
+      }
   
       // Footer - Centered with proper styling
-      const footerY = pageHeight - 20;
+      const footerY = Math.max(pageHeight - 20, currentY + 10);
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.text(companyProfile.name || 'Company Name', pageWidth / 2, footerY, { align: "center" });
@@ -515,6 +602,14 @@ export default function InvoicesPage() {
       invoiceType: "Simple" as "Simple" | "Proforma",
       items: [{ itemName: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
       currency: "USD",
+      termsAndConditions: "",
+      beneficiaryName: "",
+      beneficiaryAddress: "",
+      bankName: "",
+      bankAddress: "",
+      swiftBic: "",
+      accountNumber: "",
+      intermediaryBank: "",
     })
     setEditingInvoice(null)
   }
@@ -596,6 +691,9 @@ export default function InvoicesPage() {
                     Items & Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Bank Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -603,7 +701,7 @@ export default function InvoicesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={11} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No invoices found
                     </td>
                   </tr>
@@ -647,6 +745,22 @@ export default function InvoicesPage() {
                             </li>
                           ))}
                         </ul>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base max-w-[300px]">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {inv.beneficiaryName && (
+                            <div><strong>Beneficiary:</strong> {inv.beneficiaryName}</div>
+                          )}
+                          {inv.bankName && (
+                            <div><strong>Bank:</strong> {inv.bankName}</div>
+                          )}
+                          {inv.accountNumber && (
+                            <div><strong>Account:</strong> {inv.accountNumber}</div>
+                          )}
+                          {inv.swiftBic && (
+                            <div><strong>SWIFT:</strong> {inv.swiftBic}</div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
@@ -700,6 +814,23 @@ export default function InvoicesPage() {
                             </li>
                           ))}
                         </ul>
+                        {(inv.beneficiaryName || inv.bankName || inv.accountNumber || inv.swiftBic) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-gray-700 text-sm font-medium">Bank Details:</p>
+                            {inv.beneficiaryName && (
+                              <p className="text-gray-500 text-xs">Beneficiary: {inv.beneficiaryName}</p>
+                            )}
+                            {inv.bankName && (
+                              <p className="text-gray-500 text-xs">Bank: {inv.bankName}</p>
+                            )}
+                            {inv.accountNumber && (
+                              <p className="text-gray-500 text-xs">Account: {inv.accountNumber}</p>
+                            )}
+                            {inv.swiftBic && (
+                              <p className="text-gray-500 text-xs">SWIFT: {inv.swiftBic}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="flex space-x-2">
                         <button
@@ -845,6 +976,124 @@ export default function InvoicesPage() {
                     value={formData.date}
                     readOnly
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
+                  />
+                </div>
+                
+                {/* Terms and Conditions */}
+                <div>
+                  <label htmlFor="termsAndConditions" className="block text-sm font-medium text-gray-700 mb-1">
+                    Terms and Conditions
+                  </label>
+                  <textarea
+                    id="termsAndConditions"
+                    value={formData.termsAndConditions}
+                    onChange={(e) => setFormData({ ...formData, termsAndConditions: e.target.value })}
+                    placeholder="Enter terms and conditions"
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+
+                {/* Bank Details Section */}
+                <div className="col-span-full">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Bank Details</h3>
+                </div>
+                
+                <div>
+                  <label htmlFor="beneficiaryName" className="block text-sm font-medium text-gray-700 mb-1">
+                    Beneficiary Name
+                  </label>
+                  <input
+                    id="beneficiaryName"
+                    type="text"
+                    value={formData.beneficiaryName}
+                    onChange={(e) => setFormData({ ...formData, beneficiaryName: e.target.value })}
+                    placeholder="Enter beneficiary name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="bankName" className="block text-sm font-medium text-gray-700 mb-1">
+                    Bank Name
+                  </label>
+                  <input
+                    id="bankName"
+                    type="text"
+                    value={formData.bankName}
+                    onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                    placeholder="Enter bank name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="swiftBic" className="block text-sm font-medium text-gray-700 mb-1">
+                    SWIFT/BIC Code
+                  </label>
+                  <input
+                    id="swiftBic"
+                    type="text"
+                    value={formData.swiftBic}
+                    onChange={(e) => setFormData({ ...formData, swiftBic: e.target.value })}
+                    placeholder="Enter SWIFT/BIC code"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                    Account Number
+                  </label>
+                  <input
+                    id="accountNumber"
+                    type="text"
+                    value={formData.accountNumber}
+                    onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                    placeholder="Enter account number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+
+                <div className="col-span-full">
+                  <label htmlFor="beneficiaryAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                    Beneficiary Address
+                  </label>
+                  <textarea
+                    id="beneficiaryAddress"
+                    value={formData.beneficiaryAddress}
+                    onChange={(e) => setFormData({ ...formData, beneficiaryAddress: e.target.value })}
+                    placeholder="Enter beneficiary address"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+
+                <div className="col-span-full">
+                  <label htmlFor="bankAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                    Bank Address
+                  </label>
+                  <textarea
+                    id="bankAddress"
+                    value={formData.bankAddress}
+                    onChange={(e) => setFormData({ ...formData, bankAddress: e.target.value })}
+                    placeholder="Enter bank address"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+
+                <div className="col-span-full">
+                  <label htmlFor="intermediaryBank" className="block text-sm font-medium text-gray-700 mb-1">
+                    Intermediary Bank (Optional)
+                  </label>
+                  <input
+                    id="intermediaryBank"
+                    type="text"
+                    value={formData.intermediaryBank}
+                    onChange={(e) => setFormData({ ...formData, intermediaryBank: e.target.value })}
+                    placeholder="Enter intermediary bank details if needed"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
                 </div>
                 <div>

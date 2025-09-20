@@ -28,6 +28,9 @@ interface Quotation {
   userDefinedId: string
   date: string
   customerSupplierDetails: "customer" | "supplier"
+  customerSupplierName: string
+  customerSupplierAddress?: string
+  customerSupplierPhone?: string
   items: QuotationItem[]
   totalAmount: number
   currency: "USD" | "PKR" | "SAR"
@@ -51,6 +54,9 @@ export default function QuotationsPage() {
     userDefinedId: "",
     date: new Date().toISOString().split('T')[0],
     customerSupplierDetails: "customer" as "customer" | "supplier",
+    customerSupplierName: "",
+    customerSupplierAddress: "",
+    customerSupplierPhone: "",
     items: [{ itemName: "", amount: "" }],
     currency: "USD" as "USD" | "PKR" | "SAR",
   })
@@ -105,6 +111,9 @@ export default function QuotationsPage() {
           q.userDefinedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           q.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
           q.customerSupplierDetails.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          q.customerSupplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (q.customerSupplierAddress && q.customerSupplierAddress.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (q.customerSupplierPhone && q.customerSupplierPhone.toLowerCase().includes(searchTerm.toLowerCase())) ||
           q.items.some(item => 
             item.itemName.toLowerCase().includes(searchTerm.toLowerCase())
           )
@@ -164,6 +173,11 @@ export default function QuotationsPage() {
       return
     }
 
+    if (!formData.customerSupplierName) {
+      showToast(`Please enter ${formData.customerSupplierDetails === 'customer' ? 'customer' : 'supplier'} name`, "error")
+      return
+    }
+
     const totalAmount = Number.parseFloat(calculateTotalAmount())
 
     const quotationData: Quotation = {
@@ -171,6 +185,9 @@ export default function QuotationsPage() {
       userDefinedId: formData.userDefinedId,
       date: formData.date,
       customerSupplierDetails: formData.customerSupplierDetails,
+      customerSupplierName: formData.customerSupplierName,
+      customerSupplierAddress: formData.customerSupplierAddress,
+      customerSupplierPhone: formData.customerSupplierPhone,
       items: formData.items.map(item => ({
         itemName: item.itemName,
         amount: Number.parseFloat(item.amount),
@@ -203,6 +220,9 @@ export default function QuotationsPage() {
       userDefinedId: quotation.userDefinedId,
       date: quotation.date,
       customerSupplierDetails: quotation.customerSupplierDetails,
+      customerSupplierName: quotation.customerSupplierName,
+      customerSupplierAddress: quotation.customerSupplierAddress || "",
+      customerSupplierPhone: quotation.customerSupplierPhone || "",
       items: quotation.items.map(item => ({
         itemName: item.itemName,
         amount: item.amount.toString(),
@@ -276,6 +296,25 @@ export default function QuotationsPage() {
       doc.text(companyProfile.contact || 'Contact Person', 15, 70);
       doc.text(companyProfile.address || 'Company Address', 15, 77);
       doc.text(companyProfile.email || 'Phone Number', 15, 84);
+
+      // Customer/Supplier Information (Right side) - with equal vertical spacing
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(q.customerSupplierName || `${q.customerSupplierDetails === 'customer' ? 'Customer' : 'Supplier'} Name`, pageWidth - 80, 66, { align: "left" });
+      
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      
+      // Add customer/supplier address if available with proper spacing
+      if (q.customerSupplierAddress) {
+        const addressLines = doc.splitTextToSize(q.customerSupplierAddress, 60); // 60 units width for wrapping
+        doc.text(addressLines, pageWidth - 80, 72, { align: "left" });
+      }
+      
+      // Add customer/supplier phone if available with proper spacing
+      if (q.customerSupplierPhone) {
+        doc.text(q.customerSupplierPhone, pageWidth - 80, 82, { align: "left" });
+      }
   
       // Table Section
       let y = 110;
@@ -378,6 +417,9 @@ export default function QuotationsPage() {
       userDefinedId: "",
       date: new Date().toISOString().split('T')[0],
       customerSupplierDetails: "customer",
+      customerSupplierName: "",
+      customerSupplierAddress: "",
+      customerSupplierPhone: "",
       items: [{ itemName: "", amount: "" }],
       currency: "USD",
     })
@@ -422,7 +464,7 @@ export default function QuotationsPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by quotation ID or item name"
+                    placeholder="Search by quotation ID, customer/supplier name, address, phone, or item name"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -443,6 +485,15 @@ export default function QuotationsPage() {
                     Customer/Supplier
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Phone
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Amount
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -459,7 +510,7 @@ export default function QuotationsPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
                       No quotations found
                     </td>
                   </tr>
@@ -480,6 +531,17 @@ export default function QuotationsPage() {
                         }`}>
                           {q.customerSupplierDetails === 'customer' ? 'Customer' : 'Supplier'}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {q.customerSupplierName}
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 text-sm sm:text-base max-w-[200px]">
+                        <div className="truncate" title={q.customerSupplierAddress || "-"}>
+                          {q.customerSupplierAddress || "-"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {q.customerSupplierPhone || "-"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {getCurrencySymbol(q.currency)}{(q.totalAmount || 0).toFixed(2)}
@@ -547,6 +609,19 @@ export default function QuotationsPage() {
                             {q.customerSupplierDetails === 'customer' ? 'Customer' : 'Supplier'}
                           </span>
                         </p>
+                        <p className="text-gray-500 text-sm">
+                          {q.customerSupplierDetails === 'customer' ? 'Customer' : 'Supplier'}: {q.customerSupplierName}
+                        </p>
+                        {q.customerSupplierAddress && (
+                          <p className="text-gray-500 text-sm">
+                            Address: {q.customerSupplierAddress}
+                          </p>
+                        )}
+                        {q.customerSupplierPhone && (
+                          <p className="text-gray-500 text-sm">
+                            Phone: {q.customerSupplierPhone}
+                          </p>
+                        )}
                         <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(q.currency)}{(q.totalAmount || 0).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {q.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">
@@ -636,6 +711,45 @@ export default function QuotationsPage() {
                     <option value="customer">Customer</option>
                     <option value="supplier">Supplier</option>
                   </select>
+                </div>
+                <div>
+                  <label htmlFor="customerSupplierName" className="block text-sm font-medium text-gray-700 mb-1">
+                    {formData.customerSupplierDetails === 'customer' ? 'Customer Name' : 'Supplier Name'}
+                  </label>
+                  <input
+                    id="customerSupplierName"
+                    type="text"
+                    value={formData.customerSupplierName}
+                    onChange={(e) => setFormData({ ...formData, customerSupplierName: e.target.value })}
+                    placeholder={`Enter ${formData.customerSupplierDetails === 'customer' ? 'customer' : 'supplier'} name`}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="customerSupplierAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                    {formData.customerSupplierDetails === 'customer' ? 'Customer Address' : 'Supplier Address'}
+                  </label>
+                  <textarea
+                    id="customerSupplierAddress"
+                    value={formData.customerSupplierAddress}
+                    onChange={(e) => setFormData({ ...formData, customerSupplierAddress: e.target.value })}
+                    placeholder={`Enter ${formData.customerSupplierDetails === 'customer' ? 'customer' : 'supplier'} address`}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="customerSupplierPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                    {formData.customerSupplierDetails === 'customer' ? 'Customer Phone' : 'Supplier Phone'}
+                  </label>
+                  <input
+                    id="customerSupplierPhone"
+                    type="text"
+                    value={formData.customerSupplierPhone}
+                    onChange={(e) => setFormData({ ...formData, customerSupplierPhone: e.target.value })}
+                    placeholder={`Enter ${formData.customerSupplierDetails === 'customer' ? 'customer' : 'supplier'} phone number`}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
                 </div>
                 <div>
                   <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
