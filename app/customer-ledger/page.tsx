@@ -3,197 +3,109 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Plus, Edit, Trash2, Search } from "lucide-react"
+import { Search, Eye, Plus } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn } from "@/lib/utils"
 import { customerTransactionsAPI } from "@/lib/api"
-import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { useRouter } from "next/navigation"
 
-interface CustomerTransaction {
-  id: string
-  customer: string
-  description: string
-  date: string
-  currency: "USD" | "PKR" | "SAR"
-  debit?: number
-  credit?: number
-  balance?: number
+interface Customer {
+  name: string
+  totalTransactions: number
+  totalDebit: number
+  totalCredit: number
+  currentBalance: number
+  currency: string
+  lastTransactionDate: string
 }
 
 export default function CustomerLedgerPage() {
-  const [transactions, setTransactions] = useState<CustomerTransaction[]>([])
-  const [filteredTransactions, setFilteredTransactions] = useState<CustomerTransaction[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingTransaction, setEditingTransaction] = useState<CustomerTransaction | null>(null)
   const [loading, setLoading] = useState(false)
-  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; transaction: CustomerTransaction | null }>({
-    isOpen: false,
-    transaction: null,
-  })
-  const [formData, setFormData] = useState({
-    customer: "",
-    description: "",
-    date: new Date().toISOString().split('T')[0],
-    currency: "USD" as "USD" | "PKR" | "SAR",
-    debit: "",
-    credit: "",
-  })
+  const [isAddCustomerDialogOpen, setIsAddCustomerDialogOpen] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState("")
+  const router = useRouter()
   const { showToast } = useToast()
 
   useEffect(() => {
-    loadTransactions()
+    loadCustomers()
   }, [])
 
   useEffect(() => {
-    filterTransactions()
-  }, [transactions, searchTerm])
+    filterCustomers()
+  }, [customers, searchTerm])
 
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm])
 
-  const loadTransactions = async () => {
+  const loadCustomers = async () => {
     try {
       setLoading(true)
-      const data = await customerTransactionsAPI.getAll()
-      setTransactions(data)
+      const transactions = await customerTransactionsAPI.getAll()
+      
+      // Sort transactions by date to ensure we get the most recent balance
+      const sortedTransactions = transactions.sort((a: any, b: any) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      )
+      
+      // Group transactions by customer
+      const customerMap = new Map<string, Customer>()
+      
+      sortedTransactions.forEach((transaction: any) => {
+        const customerName = transaction.customer
+        const currency = transaction.currency
+        
+        if (!customerMap.has(customerName)) {
+          customerMap.set(customerName, {
+            name: customerName,
+            totalTransactions: 0,
+            totalDebit: 0,
+            totalCredit: 0,
+            currentBalance: 0,
+            currency: currency,
+            lastTransactionDate: transaction.date
+          })
+        }
+        
+        const customer = customerMap.get(customerName)!
+        customer.totalTransactions += 1
+        customer.totalDebit += transaction.debit || 0
+        customer.totalCredit += transaction.credit || 0
+        
+        // Always update to the latest balance since transactions are sorted by date
+        customer.currentBalance = transaction.balance || 0
+        customer.lastTransactionDate = transaction.date
+      })
+      
+      const customerList = Array.from(customerMap.values())
+      setCustomers(customerList)
     } catch (error) {
-      showToast("Failed to load transactions", "error")
-      console.error("Error loading transactions:", error)
+      showToast("Failed to load customers", "error")
+      console.error("Error loading customers:", error)
     } finally {
       setLoading(false)
     }
   }
 
-  const filterTransactions = () => {
+  const filterCustomers = () => {
     if (!searchTerm) {
-      setFilteredTransactions(transactions)
+      setFilteredCustomers(customers)
     } else {
-      const filtered = transactions.filter(
-        (transaction) =>
-          transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          transaction.date.includes(searchTerm) ||
-          transaction.currency.toLowerCase().includes(searchTerm.toLowerCase())
+      const filtered = customers.filter(
+        (customer) =>
+          customer.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
-      setFilteredTransactions(filtered)
+      setFilteredCustomers(filtered)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!formData.customer || !formData.description || !formData.date || !formData.currency) {
-      showToast("Please fill in all required fields", "error")
-      return
-    }
-
-    const debit = Number.parseFloat(formData.debit) || 0
-    const credit = Number.parseFloat(formData.credit) || 0
-
-    if (debit === 0 && credit === 0) {
-      showToast("Please enter either a debit or credit amount", "error")
-      return
-    }
-
-    if (debit > 0 && credit > 0) {
-      showToast("Please enter either debit OR credit, not both", "error")
-      return
-    }
-
-    const transactionData: CustomerTransaction = {
-      id: editingTransaction ? editingTransaction.id : Date.now().toString(),
-      customer: formData.customer,
-      description: formData.description,
-      date: formData.date,
-      currency: formData.currency,
-      debit: debit || 0,
-      credit: credit || 0,
-      balance: 0, // This will be calculated by the API
-    }
-
-    try {
-      if (editingTransaction) {
-        await customerTransactionsAPI.update(transactionData)
-        showToast("Transaction updated successfully!", "success")
-      } else {
-        await customerTransactionsAPI.create(transactionData)
-        showToast("Transaction added successfully!", "success")
-      }
-      
-      await loadTransactions()
-      resetForm()
-      setIsDialogOpen(false)
-    } catch (error) {
-      showToast("Failed to save transaction", "error")
-      console.error("Error saving transaction:", error)
-    }
-  }
-
-  const handleEdit = (transaction: CustomerTransaction) => {
-    setEditingTransaction(transaction)
-    setFormData({
-      customer: transaction.customer,
-      description: transaction.description,
-      date: transaction.date,
-      currency: transaction.currency,
-      debit: (transaction.debit || 0).toString(),
-      credit: (transaction.credit || 0).toString(),
-    })
-    setIsDialogOpen(true)
-  }
-
-  const handleDelete = async (id: string) => {
-    try {
-      await customerTransactionsAPI.delete(id)
-      await loadTransactions()
-      showToast("Transaction deleted successfully!", "success")
-    } catch (error) {
-      showToast("Failed to delete transaction", "error")
-      console.error("Error deleting transaction:", error)
-    }
-  }
-
-  const openDeleteModal = (transaction: CustomerTransaction) => {
-    setDeleteModal({ isOpen: true, transaction })
-  }
-
-  const closeDeleteModal = () => {
-    setDeleteModal({ isOpen: false, transaction: null })
-  }
-
-  const resetForm = () => {
-    setFormData({
-      customer: "",
-      description: "",
-      date: new Date().toISOString().split('T')[0],
-      currency: "USD",
-      debit: "",
-      credit: "",
-    })
-    setEditingTransaction(null)
-  }
-
-  const openAddDialog = () => {
-    resetForm()
-    setIsDialogOpen(true)
-  }
-
-  // Pagination logic
-  const indexOfLastItem = currentPage * itemsPerPage
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage
-  const currentItems = filteredTransactions.slice(indexOfFirstItem, indexOfLastItem)
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page)
-  }
-
-  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+  const getCurrencySymbol = (currency: string) => {
     switch (currency) {
       case "USD": return "$"
       case "PKR": return "₨"
@@ -202,20 +114,74 @@ export default function CustomerLedgerPage() {
     }
   }
 
+  const handleViewCustomer = (customerName: string) => {
+    router.push(`/customer-ledger/${encodeURIComponent(customerName)}`)
+  }
+
+  const handleAddCustomer = async () => {
+    if (!newCustomerName.trim()) {
+      showToast("Please enter a customer name", "error")
+      return
+    }
+
+    try {
+      // Create a new customer by adding a dummy transaction
+      await customerTransactionsAPI.create({
+        id: `ct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        customer: newCustomerName.trim(),
+        description: "Initial customer setup",
+        date: new Date().toISOString().split('T')[0],
+        currency: "USD",
+        debit: 0,
+        credit: 0,
+        balance: 0,
+      })
+      
+      showToast("Customer added successfully", "success")
+      setNewCustomerName("")
+      setIsAddCustomerDialogOpen(false)
+      await loadCustomers()
+    } catch (error) {
+      showToast("Failed to add customer", "error")
+      console.error("Error adding customer:", error)
+    }
+  }
+
+  const openAddCustomerDialog = () => {
+    setNewCustomerName("")
+    setIsAddCustomerDialogOpen(true)
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentItems = filteredCustomers.slice(startIndex, endIndex)
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Loading customers...</div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6 px-4 sm:px-6 lg:px-0">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Customer Ledger</h1>
-            <p className="text-sm sm:text-base text-gray-600">Manage customer transactions and balances</p>
+            <p className="text-sm sm:text-base text-gray-600">View customer accounts and their transaction summaries</p>
           </div>
           <button
-            onClick={openAddDialog}
+            onClick={openAddCustomerDialog}
             className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Add Transaction
+            Add Customer
           </button>
         </div>
 
@@ -225,7 +191,7 @@ export default function CustomerLedgerPage() {
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by customer, description or date"
+                placeholder="Search by customer name"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
@@ -237,25 +203,22 @@ export default function CustomerLedgerPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
+                    Customer Name
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
+                    Total Transactions
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
+                    Total Debit
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Currency
+                    Total Credit
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Debit
+                    Current Balance
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Credit
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Balance
+                    Last Transaction
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -265,205 +228,108 @@ export default function CustomerLedgerPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
-                      No transactions found
+                    <td colSpan={7} className="px-4 sm:px-6 py-8 text-center text-gray-500 text-sm sm:text-base">
+                      No customers found
                     </td>
                   </tr>
                 ) : (
-                  currentItems.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {transaction.date}
-                      </td>
+                  currentItems.map((customer) => (
+                    <tr key={customer.name} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
-                        {transaction.customer}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base">
-                        {transaction.description}
+                        {customer.name}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {transaction.currency}
+                        {customer.totalTransactions}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-red-600 text-sm sm:text-base">
-                        {(transaction.debit || 0) > 0 ? `${getCurrencySymbol(transaction.currency)}${(transaction.debit || 0).toFixed(2)}` : "-"}
+                        {customer.totalDebit > 0 ? `${getCurrencySymbol(customer.currency)}${customer.totalDebit.toFixed(2)}` : "-"}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-green-600 text-sm sm:text-base">
-                        {(transaction.credit || 0) > 0 ? `${getCurrencySymbol(transaction.currency)}${(transaction.credit || 0).toFixed(2)}` : "-"}
+                        {customer.totalCredit > 0 ? `${getCurrencySymbol(customer.currency)}${customer.totalCredit.toFixed(2)}` : "-"}
                       </td>
                       <td
                         className={cn(
                           "px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-sm sm:text-base",
-                          (transaction.balance || 0) < 0 ? "text-red-800" : "text-green-800"
+                          customer.currentBalance < 0 ? "text-red-800" : "text-green-800"
                         )}
                       >
-                        {getCurrencySymbol(transaction.currency)}{(transaction.balance || 0).toFixed(2)}
+                        {getCurrencySymbol(customer.currency)}{customer.currentBalance.toFixed(2)}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                        <div className="flex space-x-2">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
+                        {customer.lastTransactionDate}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
-                            onClick={() => handleEdit(transaction)}
-                            className="p-1 text-blue-600 hover:text-blue-800"
-                          >
-                            <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
+                          onClick={() => handleViewCustomer(customer.name)}
+                          className="text-blue-600 hover:text-blue-900 flex items-center"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View Details
                           </button>
-                          <button
-                            onClick={() => openDeleteModal(transaction)}
-                            className="p-1 text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
+            <div className="px-4 sm:px-6 py-3 border-t border-gray-200">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            onPageChange={handlePageChange}
-            itemsPerPage={itemsPerPage}
-            totalItems={filteredTransactions.length}
-          />
-        )}
+                onPageChange={setCurrentPage}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
-        {isDialogOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center !mt-0 z-50 px-4 sm:px-0">
-            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[90vw] sm:max-w-md">
-              <h3 className="text-lg sm:text-xl font-semibold mb-4">
-                {editingTransaction ? "Edit Transaction" : "Add New Transaction"}
-              </h3>
-              <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Add Customer Dialog */}
+      {isAddCustomerDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Add New Customer</h2>
+              <p className="text-sm text-gray-500 mt-1">Create a new customer account</p>
+            </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleAddCustomer(); }} className="space-y-6">
                 <div>
-                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                    Date *
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Customer Name
                   </label>
                   <input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer *
-                  </label>
-                  <input
-                    id="customer"
                     type="text"
-                    value={formData.customer}
-                    onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
+                    value={newCustomerName}
+                    onChange={(e) => setNewCustomerName(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                     placeholder="Enter customer name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    required
+                    autoFocus
                   />
                 </div>
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description *
-                  </label>
-                  <input
-                    id="description"
-                    type="text"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Enter description"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
-                    Currency *
-                  </label>
-                  <select
-                    id="currency"
-                    value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  >
-                    <option value="USD">Dollar (USD)</option>
-                    <option value="PKR">Pakistani Rupee (PKR)</option>
-                    <option value="SAR">Saudi Riyal (SAR)</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="debit" className="block text-sm font-medium text-gray-700 mb-1">
-                    Debit Amount
-                  </label>
-                  <input
-                    id="debit"
-                    type="number"
-                    step="0.01"
-                    value={formData.debit}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      setFormData({ 
-                        ...formData, 
-                        debit: value,
-                        credit: value ? "" : formData.credit // Clear credit if debit is entered
-                      })
-                    }}
-                    placeholder="Enter debit amount"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="credit" className="block text-sm font-medium text-gray-700 mb-1">
-                    Credit Amount
-                  </label>
-                  <input
-                    id="credit"
-                    type="number"
-                    step="0.01"
-                    value={formData.credit}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      setFormData({ 
-                        ...formData, 
-                        credit: value,
-                        debit: value ? "" : formData.debit // Clear debit if credit is entered
-                      })
-                    }}
-                    placeholder="Enter credit amount"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  />
-                </div>
-                <div className="flex justify-end space-x-2 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setIsDialogOpen(false)}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm sm:text-base"
-                  >
-                    Cancel
-                  </button>
+                <div className="flex space-x-3 pt-4">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm sm:text-base"
+                    className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors font-medium"
                   >
-                    {editingTransaction ? "Update" : "Add"} Transaction
+                    Add Customer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddCustomerDialogOpen(false)}
+                    className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                  >
+                    Cancel
                   </button>
                 </div>
               </form>
             </div>
           </div>
-        )}
-
-        {/* Delete Modal */}
-        <DeleteModal
-          isOpen={deleteModal.isOpen}
-          onClose={closeDeleteModal}
-          onConfirm={() => deleteModal.transaction && handleDelete(deleteModal.transaction.id)}
-          title="Delete Transaction"
-          message="Are you sure you want to delete this transaction? This action cannot be undone."
-        />
-      </div>
+        </div>
+      )}
     </DashboardLayout>
   )
 }

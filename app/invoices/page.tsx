@@ -431,14 +431,14 @@ export default function InvoicesPage() {
       doc.setFillColor(240, 240, 240);
       doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
       
-      doc.text("Row no.", colX.rowNo, y - 2, { underline: true });
-      doc.text("Item Name", colX.description, y - 2, { underline: true });
-      doc.text("Date", colX.date, y - 2, { underline: true });
-      doc.text("Qty", colX.qty, y - 2, { align: "right", underline: true });
-      doc.text("Unit", colX.unit, y - 2, { underline: true });
-      doc.text("Unit price", colX.unitPrice, y - 2, { align: "right", underline: true });
-      doc.text("VAT %", colX.vat, y - 2, { align: "right", underline: true });
-      doc.text("Total", colX.total, y - 2, { align: "right", underline: true });
+      doc.text("Row no.", colX.rowNo, y - 2);
+      doc.text("Item Name", colX.description, y - 2);
+      doc.text("Date", colX.date, y - 2);
+      doc.text("Qty", colX.qty, y - 2, { align: "right" });
+      doc.text("Unit", colX.unit, y - 2);
+      doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+      doc.text("VAT %", colX.vat, y - 2, { align: "right" });
+      doc.text("Total", colX.total, y - 2, { align: "right" });
   
       y += 8;
   
@@ -460,14 +460,14 @@ export default function InvoicesPage() {
                  doc.setFillColor(240, 240, 240);
                  doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
 
-                 doc.text("Row no.", colX.rowNo, y - 2, { underline: true });
-                 doc.text("Item Name", colX.description, y - 2, { underline: true });
-                 doc.text("Date", colX.date, y - 2, { underline: true });
-                 doc.text("Qty", colX.qty, y - 2, { align: "right", underline: true });
-                 doc.text("Unit", colX.unit, y - 2, { underline: true });
-                 doc.text("Unit price", colX.unitPrice, y - 2, { align: "right", underline: true });
-                 doc.text("VAT %", colX.vat, y - 2, { align: "right", underline: true });
-                 doc.text("Total", colX.total, y - 2, { align: "right", underline: true });
+                 doc.text("Row no.", colX.rowNo, y - 2);
+                 doc.text("Item Name", colX.description, y - 2);
+                 doc.text("Date", colX.date, y - 2);
+                 doc.text("Qty", colX.qty, y - 2, { align: "right" });
+                 doc.text("Unit", colX.unit, y - 2);
+                 doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+                 doc.text("VAT %", colX.vat, y - 2, { align: "right" });
+                 doc.text("Total", colX.total, y - 2, { align: "right" });
                  y += 8;
                  doc.setFontSize(8);
                  doc.setFont("helvetica", "normal");
@@ -481,13 +481,55 @@ export default function InvoicesPage() {
                totalVAT += itemVAT;
   
                  doc.text(`${index + 1}`, colX.rowNo, y);
-         doc.text(item.itemName || '', colX.description, y);
+         
+         // Handle item name with text wrapping
+         const itemName = item.itemName || '';
+         const maxItemNameWidth = colX.date - colX.description - 2; // Leave 2 units margin
+         const itemNameLines = doc.splitTextToSize(itemName, maxItemNameWidth);
+         
+         // Draw the first line of item name
+         doc.text(itemNameLines[0], colX.description, y);
+         
+         // Draw other columns on the first line
          doc.text(inv.date || '', colX.date, y);
          doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
          doc.text(item.unit || '', colX.unit, y);
          doc.text(`US$${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y, { align: "right" });
          doc.text(`${(item.vatPercentage || 0).toFixed(2)}%`, colX.vat, y, { align: "right" });
          doc.text(`US$${itemTotal.toFixed(2)}`, colX.total, y, { align: "right" });
+  
+         // If item name has multiple lines, draw them on subsequent rows
+         if (itemNameLines.length > 1) {
+           for (let lineIndex = 1; lineIndex < itemNameLines.length; lineIndex++) {
+             y += 6;
+             
+             // Check if we need a new page
+             if (y > pageHeight - 80) {
+               doc.addPage();
+               y = 20;
+
+               // Repeat header on new page
+               doc.setFontSize(10);
+               doc.setFont("helvetica", "bold");
+               doc.setFillColor(240, 240, 240);
+               doc.rect(10, y - 8, pageWidth - 20, 10, 'F');
+
+               doc.text("Row no.", colX.rowNo, y - 2);
+               doc.text("Item Name", colX.description, y - 2);
+               doc.text("Date", colX.date, y - 2);
+               doc.text("Qty", colX.qty, y - 2, { align: "right" });
+               doc.text("Unit", colX.unit, y - 2);
+               doc.text("Unit price", colX.unitPrice, y - 2, { align: "right" });
+               doc.text("VAT %", colX.vat, y - 2, { align: "right" });
+               doc.text("Total", colX.total, y - 2, { align: "right" });
+               y += 8;
+               doc.setFontSize(8);
+               doc.setFont("helvetica", "normal");
+             }
+             
+             doc.text(itemNameLines[lineIndex], colX.description, y);
+           }
+         }
   
         y += 6;
       });
@@ -546,30 +588,72 @@ export default function InvoicesPage() {
         
         if (inv.beneficiaryName) {
           doc.text(`BENEFICIARY'S NAME: ${inv.beneficiaryName}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "BENEFICIARY'S NAME:";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         if (inv.beneficiaryAddress) {
           doc.text(`BENEFICIARY'S ADDRESS: ${inv.beneficiaryAddress}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "BENEFICIARY'S ADDRESS:";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         if (inv.bankName) {
           doc.text(`BANK NAME: ${inv.bankName}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "BANK NAME:";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         if (inv.bankAddress) {
           doc.text(`BANK ADDRESS: ${inv.bankAddress}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "BANK ADDRESS:";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         if (inv.swiftBic) {
           doc.text(`SWIFT BIC: ${inv.swiftBic}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "SWIFT BIC:";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         if (inv.accountNumber) {
           doc.text(`USD ACCOUNT NUMBER: ${inv.accountNumber}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "USD ACCOUNT NUMBER:";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         if (inv.intermediaryBank) {
           doc.text(`INTERMEDIARY BANK (if you need): ${inv.intermediaryBank}`, 10, currentY);
+          // Draw thin black underline only for the heading
+          const headingText = "INTERMEDIARY BANK (if you need):";
+          const headingWidth = doc.getTextWidth(headingText);
+          doc.setDrawColor(0, 0, 0); // Black color
+          doc.setLineWidth(0.1); // Thin line
+          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
           currentY += 5;
         }
         currentY += 5;
