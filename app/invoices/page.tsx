@@ -37,7 +37,7 @@ interface Invoice {
   invoiceType: "Simple" | "Proforma"
   items: InvoiceItem[]
   totalAmount: number
-  currency: "USD" | "PKR" | "SAR"
+  currency: "USD" | "PKR" | "SAR" | "CNY"
   termsAndConditions?: string
   beneficiaryName?: string
   beneficiaryAddress?: string
@@ -46,6 +46,8 @@ interface Invoice {
   swiftBic?: string
   accountNumber?: string
   intermediaryBank?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export default function InvoicesPage() {
@@ -62,6 +64,7 @@ export default function InvoicesPage() {
     isOpen: false,
     invoice: null,
   })
+  const [showBankDetails, setShowBankDetails] = useState(false)
   const [formData, setFormData] = useState({
     userDefinedId: "",
     customer: "",
@@ -70,7 +73,7 @@ export default function InvoicesPage() {
     date: new Date().toISOString().split('T')[0],
     invoiceType: "Simple" as "Simple" | "Proforma",
     items: [{ itemName: "", quantity: "", unit: "", unitPrice: "", vatPercentage: "", amount: "" }],
-    currency: "USD" as "USD" | "PKR" | "SAR",
+    currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
     termsAndConditions: "",
     beneficiaryName: "",
     beneficiaryAddress: "",
@@ -184,11 +187,12 @@ export default function InvoicesPage() {
       .toFixed(2)
   }
 
-  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR" | "CNY") => {
     switch (currency) {
       case "USD": return "$"
       case "PKR": return "₨"
       case "SAR": return "ر.س"
+      case "CNY": return "¥"
       default: return ""
     }
   }
@@ -290,6 +294,19 @@ export default function InvoicesPage() {
 
   const handleEdit = (invoice: Invoice) => {
     setEditingInvoice(invoice)
+    
+    // Check if invoice has any bank details
+    const hasBankDetails = !!(
+      invoice.beneficiaryName || 
+      invoice.beneficiaryAddress || 
+      invoice.bankName || 
+      invoice.bankAddress || 
+      invoice.swiftBic || 
+      invoice.accountNumber || 
+      invoice.intermediaryBank
+    )
+    setShowBankDetails(hasBankDetails)
+    
     setFormData({
       userDefinedId: invoice.userDefinedId,
       customer: invoice.customer,
@@ -696,6 +713,7 @@ export default function InvoicesPage() {
       intermediaryBank: "",
     })
     setEditingInvoice(null)
+    setShowBankDetails(false)
   }
 
   const openAddDialog = () => {
@@ -1042,12 +1060,13 @@ export default function InvoicesPage() {
                   <select
                     id="currency"
                     value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   >
                     <option value="USD">Dollar (USD)</option>
                     <option value="PKR">Pakistani Rupee (PKR)</option>
                     <option value="SAR">Saudi Riyal (SAR)</option>
+                    <option value="CNY">Chinese Yuan (CNY)</option>
                   </select>
                 </div>
                 <div>
@@ -1080,106 +1099,136 @@ export default function InvoicesPage() {
 
                 {/* Bank Details Section */}
                 <div className="col-span-full">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Bank Details</h3>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="showBankDetails"
+                      checked={showBankDetails}
+                      onChange={(e) => {
+                        setShowBankDetails(e.target.checked)
+                        // Clear bank details when checkbox is unchecked
+                        if (!e.target.checked) {
+                          setFormData({
+                            ...formData,
+                            beneficiaryName: "",
+                            beneficiaryAddress: "",
+                            bankName: "",
+                            bankAddress: "",
+                            swiftBic: "",
+                            accountNumber: "",
+                            intermediaryBank: "",
+                          })
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="showBankDetails" className="text-lg font-semibold text-gray-900 cursor-pointer">
+                      Add Bank Details
+                    </label>
+                  </div>
                 </div>
                 
-                <div>
-                  <label htmlFor="beneficiaryName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Beneficiary Name
-                  </label>
-                  <input
-                    id="beneficiaryName"
-                    type="text"
-                    value={formData.beneficiaryName}
-                    onChange={(e) => setFormData({ ...formData, beneficiaryName: e.target.value })}
-                    placeholder="Enter beneficiary name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="bankName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Bank Name
-                  </label>
-                  <input
-                    id="bankName"
-                    type="text"
-                    value={formData.bankName}
-                    onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                    placeholder="Enter bank name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+                {showBankDetails && (
+                  <>
+                    <div>
+                      <label htmlFor="beneficiaryName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Beneficiary Name (Optional)
+                      </label>
+                      <input
+                        id="beneficiaryName"
+                        type="text"
+                        value={formData.beneficiaryName}
+                        onChange={(e) => setFormData({ ...formData, beneficiaryName: e.target.value })}
+                        placeholder="Enter beneficiary name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="bankName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Bank Name (Optional)
+                      </label>
+                      <input
+                        id="bankName"
+                        type="text"
+                        value={formData.bankName}
+                        onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                        placeholder="Enter bank name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
 
-                <div>
-                  <label htmlFor="swiftBic" className="block text-sm font-medium text-gray-700 mb-1">
-                    SWIFT/BIC Code
-                  </label>
-                  <input
-                    id="swiftBic"
-                    type="text"
-                    value={formData.swiftBic}
-                    onChange={(e) => setFormData({ ...formData, swiftBic: e.target.value })}
-                    placeholder="Enter SWIFT/BIC code"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+                    <div>
+                      <label htmlFor="swiftBic" className="block text-sm font-medium text-gray-700 mb-1">
+                        SWIFT/BIC Code (Optional)
+                      </label>
+                      <input
+                        id="swiftBic"
+                        type="text"
+                        value={formData.swiftBic}
+                        onChange={(e) => setFormData({ ...formData, swiftBic: e.target.value })}
+                        placeholder="Enter SWIFT/BIC code"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
 
-                <div>
-                  <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                    Account Number
-                  </label>
-                  <input
-                    id="accountNumber"
-                    type="text"
-                    value={formData.accountNumber}
-                    onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                    placeholder="Enter account number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+                    <div>
+                      <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                        Account Number (Optional)
+                      </label>
+                      <input
+                        id="accountNumber"
+                        type="text"
+                        value={formData.accountNumber}
+                        onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                        placeholder="Enter account number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
 
-                <div className="col-span-full">
-                  <label htmlFor="beneficiaryAddress" className="block text-sm font-medium text-gray-700 mb-1">
-                    Beneficiary Address
-                  </label>
-                  <textarea
-                    id="beneficiaryAddress"
-                    value={formData.beneficiaryAddress}
-                    onChange={(e) => setFormData({ ...formData, beneficiaryAddress: e.target.value })}
-                    placeholder="Enter beneficiary address"
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+                    <div className="col-span-full">
+                      <label htmlFor="beneficiaryAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                        Beneficiary Address (Optional)
+                      </label>
+                      <textarea
+                        id="beneficiaryAddress"
+                        value={formData.beneficiaryAddress}
+                        onChange={(e) => setFormData({ ...formData, beneficiaryAddress: e.target.value })}
+                        placeholder="Enter beneficiary address"
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
 
-                <div className="col-span-full">
-                  <label htmlFor="bankAddress" className="block text-sm font-medium text-gray-700 mb-1">
-                    Bank Address
-                  </label>
-                  <textarea
-                    id="bankAddress"
-                    value={formData.bankAddress}
-                    onChange={(e) => setFormData({ ...formData, bankAddress: e.target.value })}
-                    placeholder="Enter bank address"
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+                    <div className="col-span-full">
+                      <label htmlFor="bankAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                        Bank Address (Optional)
+                      </label>
+                      <textarea
+                        id="bankAddress"
+                        value={formData.bankAddress}
+                        onChange={(e) => setFormData({ ...formData, bankAddress: e.target.value })}
+                        placeholder="Enter bank address"
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
 
-                <div className="col-span-full">
-                  <label htmlFor="intermediaryBank" className="block text-sm font-medium text-gray-700 mb-1">
-                    Intermediary Bank (Optional)
-                  </label>
-                  <input
-                    id="intermediaryBank"
-                    type="text"
-                    value={formData.intermediaryBank}
-                    onChange={(e) => setFormData({ ...formData, intermediaryBank: e.target.value })}
-                    placeholder="Enter intermediary bank details if needed"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+                    <div className="col-span-full">
+                      <label htmlFor="intermediaryBank" className="block text-sm font-medium text-gray-700 mb-1">
+                        Intermediary Bank (Optional)
+                      </label>
+                      <input
+                        id="intermediaryBank"
+                        type="text"
+                        value={formData.intermediaryBank}
+                        onChange={(e) => setFormData({ ...formData, intermediaryBank: e.target.value })}
+                        placeholder="Enter intermediary bank details if needed"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Items</label>
                   {formData.items.map((item, index) => (

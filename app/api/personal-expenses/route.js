@@ -4,7 +4,9 @@ import PersonalExpense from '@/lib/models/PersonalExpense';
 export async function GET() {
   try {
     await connectDB();
-    const personalExpenses = await PersonalExpense.find({}).sort({ createdAt: -1 });
+    // Sort by date ascending (oldest first), then by createdAt ascending
+    // This ensures that newly added personal expenses appear at the bottom
+    const personalExpenses = await PersonalExpense.find({}).sort({ date: 1, createdAt: 1 });
     return Response.json(personalExpenses);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

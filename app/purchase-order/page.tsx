@@ -34,7 +34,9 @@ interface PurchaseOrder {
   date: string
   items: PurchaseOrderItem[]
   totalAmount: number
-  currency: "USD" | "PKR" | "SAR"
+  currency: "USD" | "PKR" | "SAR" | "CNY"
+  createdAt?: string
+  updatedAt?: string
 }
 
 export default function PurchaseOrdersPage() {
@@ -58,7 +60,7 @@ export default function PurchaseOrdersPage() {
     supplierPhone: "",
     date: new Date().toISOString().split('T')[0],
     items: [{ itemName: "", quantity: "", unitPrice: "", amount: "" }],
-    currency: "USD" as "USD" | "PKR" | "SAR",
+    currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
   })
   console.log(">>>>>formdAta", formData);
   const { showToast } = useToast()
@@ -163,11 +165,12 @@ export default function PurchaseOrdersPage() {
       .toFixed(2)
   }
 
-  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR" | "CNY") => {
     switch (currency) {
       case "USD": return "$"
       case "PKR": return "₨"
       case "SAR": return "ر.س"
+      case "CNY": return "¥"
       default: return ""
     }
   }
@@ -772,12 +775,13 @@ export default function PurchaseOrdersPage() {
                   <select
                     id="currency"
                     value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   >
                     <option value="USD">Dollar (USD)</option>
                     <option value="PKR">Pakistani Rupee (PKR)</option>
                     <option value="SAR">Saudi Riyal (SAR)</option>
+                    <option value="CNY">Chinese Yuan (CNY)</option>
                   </select>
                 </div>
                 <div>

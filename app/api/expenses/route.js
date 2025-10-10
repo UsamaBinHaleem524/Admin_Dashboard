@@ -41,7 +41,9 @@ export async function GET() {
     // Run migration on first GET request
     await migrateOldData();
     
-    const expenses = await Expense.find({}).sort({ date: -1, createdAt: -1 });
+    // Sort by date ascending (oldest first), then by createdAt ascending
+    // This ensures that newly added expenses appear at the bottom
+    const expenses = await Expense.find({}).sort({ date: 1, createdAt: 1 });
     return Response.json(expenses);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

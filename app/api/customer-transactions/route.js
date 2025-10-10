@@ -50,7 +50,9 @@ export async function GET() {
     // Run migration if needed
     await migrateOldData();
     
-    const transactions = await CustomerTransaction.find({}).sort({ createdAt: -1 });
+    // Sort by date ascending (oldest first), then by createdAt ascending
+    // This ensures that newly added transactions appear at the bottom
+    const transactions = await CustomerTransaction.find({}).sort({ date: 1, createdAt: 1 });
     
     // Ensure all transactions have the new fields with default values
     const processedTransactions = transactions.map(transaction => ({

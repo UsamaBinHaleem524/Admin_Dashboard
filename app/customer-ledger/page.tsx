@@ -110,6 +110,7 @@ export default function CustomerLedgerPage() {
       case "USD": return "$"
       case "PKR": return "₨"
       case "SAR": return "ر.س"
+      case "CNY": return "¥"
       default: return ""
     }
   }

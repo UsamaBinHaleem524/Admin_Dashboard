@@ -19,7 +19,9 @@ interface ShopExpense {
   income: number
   outgoingAmount: number
   totalCash: number
-  currency: "USD" | "PKR" | "SAR"
+  currency: "USD" | "PKR" | "SAR" | "CNY"
+  createdAt?: string
+  updatedAt?: string
 }
 
 export default function ShopExpensesPage() {
@@ -29,7 +31,7 @@ export default function ShopExpensesPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedYear, setSelectedYear] = useState("")
-  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR'>("USD")
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR' | 'CNY'>("USD")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -46,7 +48,7 @@ export default function ShopExpensesPage() {
     previousAmount: "",
     income: "",
     outgoingAmount: "",
-    currency: "USD" as "USD" | "PKR" | "SAR",
+    currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
   })
   const { showToast } = useToast()
 
@@ -214,21 +216,23 @@ export default function ShopExpensesPage() {
     setCurrentPage(page)
   }
 
-  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR" | "CNY") => {
     switch (currency) {
       case "USD": return "$"
       case "PKR": return "₨"
       case "SAR": return "ر.س"
+      case "CNY": return "¥"
       default: return ""
     }
   }
 
-  const convertToDisplayCurrency = (amount: number, fromCurrency: 'USD' | 'PKR' | 'SAR') => {
+  const convertToDisplayCurrency = (amount: number, fromCurrency: 'USD' | 'PKR' | 'SAR' | 'CNY') => {
     // Simple conversion rates (you might want to use real-time rates in production)
     const conversionRates = {
-      USD: { USD: 1, PKR: 280, SAR: 3.75 },
-      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013 },
-      SAR: { USD: 0.27, PKR: 75, SAR: 1 }
+      USD: { USD: 1, PKR: 280, SAR: 3.75, CNY: 7.24 },
+      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013, CNY: 0.026 },
+      SAR: { USD: 0.27, PKR: 75, SAR: 1, CNY: 1.93 },
+      CNY: { USD: 0.138, PKR: 38.66, SAR: 0.518, CNY: 1 }
     }
     
     return amount * conversionRates[fromCurrency][displayCurrency]
@@ -392,7 +396,7 @@ export default function ShopExpensesPage() {
           </div>
 
           {/* Total Cash Breakdown */}
-          <div className="mt-6">
+          {/* <div className="mt-6">
             <h4 className="text-md font-medium text-blue-600 mb-3">Total Cash by Currency</h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-lg p-4">
@@ -429,7 +433,7 @@ export default function ShopExpensesPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
         </div>
 
         {/* Currency Selector */}
@@ -438,12 +442,13 @@ export default function ShopExpensesPage() {
             <h3 className="text-lg font-semibold text-gray-900">Display Currency</h3>
             <select
               value={displayCurrency}
-              onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR')}
+              onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR' | 'CNY')}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="USD">USD - Dollar</option>
               <option value="PKR">PKR - Pakistani Rupee</option>
               <option value="SAR">SAR - Saudi Riyal</option>
+              <option value="CNY">CNY - Chinese Yuan</option>
             </select>
           </div>
           <p className="text-sm text-gray-500 mt-2">
@@ -758,12 +763,13 @@ export default function ShopExpensesPage() {
                   </label>
                   <select
                     value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="USD">Dollar (USD)</option>
                     <option value="PKR">Pakistani Rupee (PKR)</option>
                     <option value="SAR">Saudi Riyal (SAR)</option>
+                    <option value="CNY">Chinese Yuan (CNY)</option>
                   </select>
                 </div>
                 <div className="flex justify-end space-x-3 pt-4">

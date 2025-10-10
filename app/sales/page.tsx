@@ -15,8 +15,10 @@ interface Sale {
   item: string
   description: string
   amount: number
-  currency: "USD" | "PKR" | "SAR"
+  currency: "USD" | "PKR" | "SAR" | "CNY"
   date: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export default function SalesPage() {
@@ -32,13 +34,13 @@ export default function SalesPage() {
     isOpen: false,
     sale: null,
   })
-  const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "PKR" | "SAR">("USD")
+  const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "PKR" | "SAR" | "CNY">("USD")
   const [formData, setFormData] = useState({
     customer: "",
     item: "",
     description: "",
     amount: "",
-    currency: "USD" as "USD" | "PKR" | "SAR",
+    currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
     date: new Date().toISOString().split('T')[0],
   })
   const [products, setProducts] = useState<{id: string, name: string}[]>([])
@@ -188,6 +190,7 @@ export default function SalesPage() {
     USD: 1,
     PKR: 280, // 1 USD = 280 PKR (approximate)
     SAR: 3.75, // 1 USD = 3.75 SAR (approximate)
+    CNY: 7.24, // 1 USD = 7.24 CNY (approximate)
   }
 
   const convertCurrency = (amount: number, fromCurrency: string, toCurrency: string) => {
@@ -198,11 +201,12 @@ export default function SalesPage() {
     return usdAmount * conversionRates[toCurrency as keyof typeof conversionRates]
   }
 
-  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR") => {
+  const getCurrencySymbol = (currency: "USD" | "PKR" | "SAR" | "CNY") => {
     switch (currency) {
       case "USD": return "$"
       case "PKR": return "₨"
       case "SAR": return "ر.س"
+      case "CNY": return "¥"
       default: return ""
     }
   }
@@ -274,12 +278,13 @@ export default function SalesPage() {
               <select
                 id="currency-selector"
                 value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value as "USD" | "PKR" | "SAR")}
+                onChange={(e) => setSelectedCurrency(e.target.value as "USD" | "PKR" | "SAR" | "CNY")}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="USD">Dollar (USD)</option>
                 <option value="PKR">Pakistani Rupee (PKR)</option>
                 <option value="SAR">Saudi Riyal (SAR)</option>
+                <option value="CNY">Chinese Yuan (CNY)</option>
               </select>
             </div>
           </div>
@@ -506,12 +511,13 @@ export default function SalesPage() {
                   <select
                     id="currency"
                     value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                   >
                     <option value="USD">Dollar (USD)</option>
                     <option value="PKR">Pakistani Rupee (PKR)</option>
                     <option value="SAR">Saudi Riyal (SAR)</option>
+                    <option value="CNY">Chinese Yuan (CNY)</option>
                   </select>
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">

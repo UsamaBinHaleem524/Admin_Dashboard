@@ -4,7 +4,9 @@ import PurchaseOrder from '@/lib/models/PurchaseOrder';
 export async function GET() {
   try {
     await connectDB();
-    const purchaseOrders = await PurchaseOrder.find({}).sort({ createdAt: -1 });
+    // Sort by date ascending (oldest first), then by createdAt ascending
+    // This ensures that newly added purchase orders appear at the bottom
+    const purchaseOrders = await PurchaseOrder.find({}).sort({ date: 1, createdAt: 1 });
     return Response.json(purchaseOrders);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

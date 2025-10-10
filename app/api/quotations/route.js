@@ -4,7 +4,9 @@ import Quotation from '@/lib/models/Quotation';
 export async function GET() {
   try {
     await connectDB();
-    const quotations = await Quotation.find({}).sort({ createdAt: -1 });
+    // Sort by date ascending (oldest first), then by createdAt ascending
+    // This ensures that newly added quotations appear at the bottom
+    const quotations = await Quotation.find({}).sort({ date: 1, createdAt: 1 });
     return Response.json(quotations);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

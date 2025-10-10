@@ -19,10 +19,12 @@ interface CustomerTransaction {
   customer: string
   description: string
   date: string
-  currency: "USD" | "PKR" | "SAR"
+  currency: "USD" | "PKR" | "SAR" | "CNY"
   debit?: number
   credit?: number
   balance?: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export default function CustomerDetailPage() {
@@ -41,14 +43,14 @@ export default function CustomerDetailPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedYear, setSelectedYear] = useState("")
-  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR'>("USD")
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR' | 'CNY'>("USD")
   const [selectedTransactions, setSelectedTransactions] = useState<Set<string>>(new Set())
   const [isAllSelected, setIsAllSelected] = useState(false)
   const [formData, setFormData] = useState({
     customer: "",
     description: "",
     date: new Date().toISOString().split('T')[0],
-    currency: "USD" as "USD" | "PKR" | "SAR",
+    currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
     debit: "",
     credit: "",
   })
@@ -122,6 +124,18 @@ export default function CustomerDetailPage() {
           transaction.currency.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
+
+    // Sort transactions by date in ascending order (oldest first, newest last)
+    // For transactions with the same date, sort by createdAt to ensure newly added ones appear at the bottom
+    filtered = filtered.sort((a, b) => {
+      const dateComparison = new Date(a.date).getTime() - new Date(b.date).getTime()
+      if (dateComparison !== 0) return dateComparison
+      
+      // If dates are the same, sort by createdAt
+      const aCreatedAt = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const bCreatedAt = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return aCreatedAt - bCreatedAt
+    })
 
     setFilteredTransactions(filtered)
   }
@@ -198,7 +212,7 @@ export default function CustomerDetailPage() {
       customer: customerName,
       description: "",
       date: new Date().toISOString().split('T')[0],
-      currency: "USD" as "USD" | "PKR" | "SAR",
+      currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
       debit: "",
       credit: "",
     })
@@ -216,16 +230,18 @@ export default function CustomerDetailPage() {
       case "USD": return "$"
       case "PKR": return "₨"
       case "SAR": return "ر.س"
+      case "CNY": return "¥"
       default: return ""
     }
   }
 
-  const convertToDisplayCurrency = (amount: number, fromCurrency: 'USD' | 'PKR' | 'SAR') => {
+  const convertToDisplayCurrency = (amount: number, fromCurrency: 'USD' | 'PKR' | 'SAR' | 'CNY') => {
     // Simple conversion rates (you might want to use real-time rates in production)
     const conversionRates = {
-      USD: { USD: 1, PKR: 280, SAR: 3.75 },
-      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013 },
-      SAR: { USD: 0.27, PKR: 75, SAR: 1 }
+      USD: { USD: 1, PKR: 280, SAR: 3.75, CNY: 7.24 },
+      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013, CNY: 0.026 },
+      SAR: { USD: 0.27, PKR: 75, SAR: 1, CNY: 1.93 },
+      CNY: { USD: 0.138, PKR: 38.66, SAR: 0.518, CNY: 1 }
     }
     
     return amount * conversionRates[fromCurrency][displayCurrency]
@@ -252,10 +268,15 @@ export default function CustomerDetailPage() {
 
   const getCurrentBalance = () => {
     if (transactions.length === 0) return 0
-    // Sort transactions by date to get the most recent one
-    const sortedTransactions = [...transactions].sort((a, b) => 
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    )
+    // Sort transactions by date, then by createdAt to get the most recent one
+    const sortedTransactions = [...transactions].sort((a, b) => {
+      const dateComparison = new Date(a.date).getTime() - new Date(b.date).getTime()
+      if (dateComparison !== 0) return dateComparison
+      
+      const aCreatedAt = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const bCreatedAt = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return aCreatedAt - bCreatedAt
+    })
     const lastTransaction = sortedTransactions[sortedTransactions.length - 1]
     return convertToDisplayCurrency(lastTransaction.balance || 0, lastTransaction.currency)
   }
@@ -642,12 +663,13 @@ export default function CustomerDetailPage() {
             <h3 className="text-lg font-semibold text-gray-900">Display Currency</h3>
             <select
               value={displayCurrency}
-              onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR')}
+              onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR' | 'CNY')}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="USD">USD - Dollar</option>
               <option value="PKR">PKR - Pakistani Rupee</option>
               <option value="SAR">SAR - Saudi Riyal</option>
+              <option value="CNY">CNY - Chinese Yuan</option>
             </select>
           </div>
           <p className="text-sm text-gray-500 mt-2">
@@ -964,13 +986,14 @@ export default function CustomerDetailPage() {
                   </label>
                   <select
                     value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                     required
                   >
                     <option value="USD">USD</option>
                     <option value="PKR">PKR</option>
                     <option value="SAR">SAR</option>
+                    <option value="CNY">CNY</option>
                   </select>
                 </div>
               </div>

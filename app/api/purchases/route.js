@@ -46,7 +46,9 @@ export async function GET() {
     // Run migration if needed
     await migrateOldData();
     
-    const purchases = await Purchase.find({}).sort({ createdAt: -1 });
+    // Sort by date ascending (oldest first), then by createdAt ascending
+    // This ensures that newly added purchases appear at the bottom
+    const purchases = await Purchase.find({}).sort({ date: 1, createdAt: 1 });
     
     // Ensure all purchases have the new fields with default values
     const processedPurchases = purchases.map(purchase => ({

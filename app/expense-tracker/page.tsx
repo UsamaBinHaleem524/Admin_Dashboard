@@ -15,7 +15,9 @@ interface Expense {
   description: string
   date: string
   amount: number
-  currency: "USD" | "PKR" | "SAR"
+  currency: "USD" | "PKR" | "SAR" | "CNY"
+  createdAt?: string
+  updatedAt?: string
 }
 
 export default function ExpenseTrackerPage() {
@@ -25,7 +27,7 @@ export default function ExpenseTrackerPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedYear, setSelectedYear] = useState("")
-  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR'>("USD")
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR' | 'CNY'>("USD")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -39,7 +41,7 @@ export default function ExpenseTrackerPage() {
     description: "",
     date: new Date().toISOString().split('T')[0],
     amount: "",
-    currency: "USD" as "USD" | "PKR" | "SAR",
+    currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
   })
   const { showToast } = useToast()
 
@@ -196,6 +198,7 @@ export default function ExpenseTrackerPage() {
       case 'USD': return '$'
       case 'PKR': return '₨'
       case 'SAR': return 'ر.س'
+      case 'CNY': return '¥'
       default: return '$'
     }
   }
@@ -204,9 +207,10 @@ export default function ExpenseTrackerPage() {
     if (fromCurrency === displayCurrency) return amount
     
     const conversionRates: Record<string, Record<string, number>> = {
-      USD: { USD: 1, PKR: 280, SAR: 3.75 },
-      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013 },
-      SAR: { USD: 0.27, PKR: 75, SAR: 1 }
+      USD: { USD: 1, PKR: 280, SAR: 3.75, CNY: 7.24 },
+      PKR: { USD: 0.0036, PKR: 1, SAR: 0.013, CNY: 0.026 },
+      SAR: { USD: 0.27, PKR: 75, SAR: 1, CNY: 1.93 },
+      CNY: { USD: 0.138, PKR: 38.66, SAR: 0.518, CNY: 1 }
     }
     
     return amount * (conversionRates[fromCurrency]?.[displayCurrency] || 1)
@@ -281,12 +285,13 @@ export default function ExpenseTrackerPage() {
               <select
                 id="currency-selector"
                 value={displayCurrency}
-                onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR')}
+                onChange={(e) => setDisplayCurrency(e.target.value as 'USD' | 'PKR' | 'SAR' | 'CNY')}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="USD">Dollar (USD)</option>
                 <option value="PKR">Pakistani Rupee (PKR)</option>
                 <option value="SAR">Saudi Riyal (SAR)</option>
+                <option value="CNY">Chinese Yuan (CNY)</option>
               </select>
             </div>
           </div>
@@ -575,12 +580,13 @@ export default function ExpenseTrackerPage() {
                   <select
                     id="currency"
                     value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" })}
+                    onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   >
                     <option value="USD">USD ($)</option>
                     <option value="PKR">PKR (₨)</option>
                     <option value="SAR">SAR (ر.س)</option>
+                    <option value="CNY">CNY (¥)</option>
                   </select>
                 </div>
                 <div>
