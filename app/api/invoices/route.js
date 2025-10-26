@@ -23,12 +23,6 @@ export async function POST(request) {
       return Response.json({ error: 'Missing required fields: userDefinedId, customer, date, invoiceType, items, currency' }, { status: 400 });
     }
     
-    // Check if userDefinedId already exists
-    const existingInvoice = await Invoice.findOne({ userDefinedId: data.userDefinedId });
-    if (existingInvoice) {
-      return Response.json({ error: 'Invoice ID already exists. Please use a different ID.' }, { status: 400 });
-    }
-    
     // Generate internal ID
     const internalId = `invoice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -52,15 +46,6 @@ export async function PUT(request) {
     // Validate required fields
     if (!data.id || !data.userDefinedId || !data.customer || !data.date || !data.invoiceType || !data.items || !data.currency) {
       return Response.json({ error: 'Missing required fields: id, userDefinedId, customer, date, invoiceType, items, currency' }, { status: 400 });
-    }
-    
-    // Check if userDefinedId already exists for a different invoice
-    const existingInvoice = await Invoice.findOne({ 
-      userDefinedId: data.userDefinedId,
-      id: { $ne: data.id } // Exclude current invoice from check
-    });
-    if (existingInvoice) {
-      return Response.json({ error: 'Invoice ID already exists. Please use a different ID.' }, { status: 400 });
     }
     
     const invoice = await Invoice.findOneAndUpdate(
