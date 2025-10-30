@@ -12,6 +12,7 @@ import { Pagination } from "@/components/ui/pagination"
 
 interface ShopExpense {
   id: string
+  description: string
   incomingDescription: string
   outgoingDescription: string
   date: string
@@ -42,8 +43,7 @@ export default function ShopExpensesPage() {
     expense: null,
   })
   const [formData, setFormData] = useState({
-    incomingDescription: "",
-    outgoingDescription: "",
+    description: "",
     date: new Date().toISOString().split('T')[0],
     previousAmount: "",
     income: "",
@@ -82,11 +82,12 @@ export default function ShopExpensesPage() {
     
     if (searchTerm) {
       filtered = filtered.filter(
-        (expense) =>
-          expense.incomingDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          expense.outgoingDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          expense.date.includes(searchTerm) ||
-          expense.currency.toLowerCase().includes(searchTerm.toLowerCase())
+        (expense) => {
+          const description = (expense.description || expense.incomingDescription || expense.outgoingDescription || '').toLowerCase()
+          return description.includes(searchTerm.toLowerCase()) ||
+            expense.date.includes(searchTerm) ||
+            expense.currency.toLowerCase().includes(searchTerm.toLowerCase())
+        }
       )
     }
     
@@ -127,8 +128,9 @@ export default function ShopExpensesPage() {
 
     const shopExpenseData: ShopExpense = {
       id: editingShopExpense ? editingShopExpense.id : Date.now().toString(),
-      incomingDescription: formData.incomingDescription,
-      outgoingDescription: formData.outgoingDescription,
+      description: formData.description,
+      incomingDescription: '', // Keep for backward compatibility
+      outgoingDescription: formData.description, // Keep for backward compatibility
       date: formData.date,
       previousAmount,
       income,
@@ -157,9 +159,9 @@ export default function ShopExpensesPage() {
 
   const handleEdit = (shopExpense: ShopExpense) => {
     setEditingShopExpense(shopExpense)
+    const description = shopExpense.description || shopExpense.incomingDescription || shopExpense.outgoingDescription || ""
     setFormData({
-      incomingDescription: shopExpense.incomingDescription || "",
-      outgoingDescription: shopExpense.outgoingDescription || "",
+      description: description,
       date: shopExpense.date,
       previousAmount: (shopExpense.previousAmount || 0).toString(),
       income: (shopExpense.income || 0).toString(),
@@ -190,8 +192,7 @@ export default function ShopExpensesPage() {
 
   const resetForm = () => {
     setFormData({
-      incomingDescription: "",
-      outgoingDescription: "",
+      description: "",
       date: new Date().toISOString().split('T')[0],
       previousAmount: "",
       income: "",
@@ -259,9 +260,9 @@ export default function ShopExpensesPage() {
 
   const getCurrencyBreakdown = () => {
     const breakdown = {
-      income: { USD: 0, PKR: 0, SAR: 0 },
-      outgoing: { USD: 0, PKR: 0, SAR: 0 },
-      totalCash: { USD: 0, PKR: 0, SAR: 0 }
+      income: { USD: 0, PKR: 0, SAR: 0, CNY: 0 },
+      outgoing: { USD: 0, PKR: 0, SAR: 0, CNY: 0 },
+      totalCash: { USD: 0, PKR: 0, SAR: 0, CNY: 0 }
     }
     
     filteredShopExpenses.forEach(expense => {
@@ -288,13 +289,7 @@ export default function ShopExpensesPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Shop Expenses</h1>
             <p className="text-sm sm:text-base text-gray-600">Manage shop expenses and cash flow</p>
           </div>
-          <button
-            onClick={openAddDialog}
-            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base w-full sm:w-auto"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Shop Expense
-          </button>
+
         </div>
 
         {/* Summary Cards */}
@@ -456,6 +451,15 @@ export default function ShopExpensesPage() {
           </p>
         </div>
 
+        {/* INCOME & EXPENSE LEDGER BOOK Header */}
+        <div className="bg-white rounded-lg shadow p-6 sm:p-8">
+          <div className="border-2 border-black p-6 sm:p-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-center uppercase tracking-wide">
+              INCOME & EXPENSE LEDGER BOOK
+            </h2>
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 sm:p-6 border-b">
             <div className="flex flex-col space-y-4">
@@ -554,13 +558,13 @@ export default function ShopExpensesPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    No.
+                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Date
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                    Incoming Description
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                    Outgoing Description
+                    Description
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Previous Amount
@@ -575,9 +579,6 @@ export default function ShopExpensesPage() {
                     Total Cash
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                    Currency
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Actions
                   </th>
                 </tr>
@@ -585,27 +586,27 @@ export default function ShopExpensesPage() {
               <tbody className="bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
+                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
                       Loading...
                     </td>
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
+                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
                       No shop expenses found
                     </td>
                   </tr>
                 ) : (
-                  currentItems.map((expense) => (
+                  currentItems.map((expense, index) => (
                     <tr key={expense.id} className="hover:bg-gray-50">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300">
+                        {indexOfFirstItem + index + 1}
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300">
                         {expense.date}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900 border border-gray-300">
-                        {expense.incomingDescription || "-"}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900 border border-gray-300">
-                        {expense.outgoingDescription || "-"}
+                        {expense.description || expense.incomingDescription || expense.outgoingDescription || "-"}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
                         {getCurrencySymbol(expense.currency)}{(expense.previousAmount || 0).toFixed(2)}
@@ -621,9 +622,6 @@ export default function ShopExpensesPage() {
                         (expense.totalCash || 0) >= 0 ? "text-blue-600" : "text-red-600"
                       )}>
                         {getCurrencySymbol(expense.currency)}{(expense.totalCash || 0).toFixed(2)}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300">
-                        {expense.currency}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300">
                         <div className="flex items-center space-x-2">
@@ -644,6 +642,121 @@ export default function ShopExpensesPage() {
                     </tr>
                   ))
                 )}
+                
+                {/* Add new row */}
+                <tr className="bg-blue-50">
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300">
+                    {indexOfFirstItem + currentItems.length + 1}
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
+                    <input
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 border border-gray-300">
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                      rows={2}
+                      placeholder="Enter description"
+                    />
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.previousAmount}
+                      onChange={(e) => setFormData({ ...formData, previousAmount: e.target.value })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.income}
+                      onChange={(e) => setFormData({ ...formData, income: e.target.value })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.outgoingAmount}
+                      onChange={(e) => setFormData({ ...formData, outgoingAmount: e.target.value })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </td>
+                  <td className={cn(
+                    "px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300",
+                    calculateTotalCash() >= 0 ? "text-blue-600" : "text-red-600"
+                  )}>
+                    {getCurrencySymbol(formData.currency)}{calculateTotalCash().toFixed(2)}
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={formData.currency}
+                        onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
+                        className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="USD">USD</option>
+                        <option value="PKR">PKR</option>
+                        <option value="SAR">SAR</option>
+                        <option value="CNY">CNY</option>
+                      </select>
+                      <button
+                        onClick={async () => {
+                          if (!formData.date || !formData.currency) {
+                            showToast("Please fill in date and currency", "error")
+                            return
+                          }
+                          try {
+                            const previousAmount = Number.parseFloat(formData.previousAmount) || 0
+                            const income = Number.parseFloat(formData.income) || 0
+                            const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
+
+                            const shopExpenseData: ShopExpense = {
+                              id: Date.now().toString(),
+                              description: formData.description,
+                              incomingDescription: '',
+                              outgoingDescription: formData.description,
+                              date: formData.date,
+                              previousAmount,
+                              income,
+                              outgoingAmount,
+                              totalCash: (previousAmount + income) - outgoingAmount,
+                              currency: formData.currency,
+                            }
+                            
+                            await shopExpensesAPI.create(shopExpenseData)
+                            showToast("Shop expense added successfully!", "success")
+                            
+                            await loadShopExpenses()
+                            resetForm()
+                          } catch (error) {
+                            showToast("Failed to save shop expense", "error")
+                            console.error("Error saving shop expense:", error)
+                          }
+                        }}
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -660,18 +773,14 @@ export default function ShopExpensesPage() {
           />
         )}
 
-        {/* Add/Edit Dialog */}
-        {isDialogOpen && (
+        {/* Edit Dialog - Only for editing existing records */}
+        {isDialogOpen && editingShopExpense && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 !mt-0">
             <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-              <h2 className="text-lg font-semibold mb-4">
-                {editingShopExpense ? "Edit Shop Expense" : "Add Shop Expense"}
-              </h2>
+              <h2 className="text-lg font-semibold mb-4">Edit Shop Expense</h2>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                   <input
                     type="date"
                     value={formData.date}
@@ -681,9 +790,7 @@ export default function ShopExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Previous Amount
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Previous Amount</label>
                   <input
                     type="number"
                     step="0.01"
@@ -695,9 +802,7 @@ export default function ShopExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Income
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Income</label>
                   <input
                     type="number"
                     step="0.01"
@@ -709,21 +814,7 @@ export default function ShopExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Incoming Description
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.incomingDescription}
-                    onChange={(e) => setFormData({ ...formData, incomingDescription: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter incoming description"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Outgoing Amount
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Outgoing Amount</label>
                   <input
                     type="number"
                     step="0.01"
@@ -735,21 +826,17 @@ export default function ShopExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Outgoing Description
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.outgoingDescription}
-                    onChange={(e) => setFormData({ ...formData, outgoingDescription: e.target.value })}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter outgoing description"
+                    placeholder="Enter description"
+                    rows={3}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Cash (Calculated)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Cash (Calculated)</label>
                   <input
                     type="text"
                     value={`${getCurrencySymbol(formData.currency)}${calculateTotalCash().toFixed(2)}`}
@@ -758,9 +845,7 @@ export default function ShopExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Currency *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency *</label>
                   <select
                     value={formData.currency}
                     onChange={(e) => setFormData({ ...formData, currency: e.target.value as "USD" | "PKR" | "SAR" | "CNY" })}
@@ -784,7 +869,7 @@ export default function ShopExpensesPage() {
                     type="submit"
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                   >
-                    {editingShopExpense ? "Update" : "Add"}
+                    Update
                   </button>
                 </div>
               </form>

@@ -85,6 +85,22 @@ export default function InvoicesPage() {
   })
   const { showToast } = useToast()
 
+  // Normalize and sanitize text for PDF to avoid unsupported glyphs/controls
+  const sanitizePdfText = (input: string | undefined | null): string => {
+    if (!input) return ""
+    try {
+      let s = String(input)
+        .normalize('NFKC')
+        .replace(/[\u0000-\u001F\u007F\u0080-\u009F]/g, ' ') // remove control chars
+        .replace(/\u000c/g, ' ') // explicit form feed to space
+        .replace(/[\uFF0C，]/g, ', ') // full-width comma to ASCII comma+space
+        .replace(/\s+/g, ' ') // collapse whitespace
+      return s.trim()
+    } catch {
+      return String(input)
+    }
+  }
+
   useEffect(() => {
     loadInvoices()
     loadProducts()
@@ -604,74 +620,69 @@ export default function InvoicesPage() {
         doc.setFont("helvetica", "normal");
         
         if (inv.beneficiaryName) {
-          doc.text(`BENEFICIARY'S NAME: ${inv.beneficiaryName}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "BENEFICIARY'S NAME:";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          // Label
+          doc.setFont("helvetica", "bold");
+          doc.text("BENEFICIARY'S NAME:", 10, currentY);
+          // Value (wrapped)
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(inv.beneficiaryName, pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         if (inv.beneficiaryAddress) {
-          doc.text(`BENEFICIARY'S ADDRESS: ${inv.beneficiaryAddress}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "BENEFICIARY'S ADDRESS:";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          doc.setFont("helvetica", "bold");
+          doc.text("BENEFICIARY'S ADDRESS:", 10, currentY);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(inv.beneficiaryAddress, pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         if (inv.bankName) {
-          doc.text(`BANK NAME: ${inv.bankName}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "BANK NAME:";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          doc.setFont("helvetica", "bold");
+          doc.text("BANK NAME:", 10, currentY);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(inv.bankName, pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         if (inv.bankAddress) {
-          doc.text(`BANK ADDRESS: ${inv.bankAddress}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "BANK ADDRESS:";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          doc.setFont("helvetica", "bold");
+          doc.text("BANK ADDRESS:", 10, currentY);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(sanitizePdfText(inv.bankAddress), pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         if (inv.swiftBic) {
-          doc.text(`SWIFT BIC: ${inv.swiftBic}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "SWIFT BIC:";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          doc.setFont("helvetica", "bold");
+          doc.text("SWIFT BIC:", 10, currentY);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(inv.swiftBic, pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         if (inv.accountNumber) {
-          doc.text(`USD ACCOUNT NUMBER: ${inv.accountNumber}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "USD ACCOUNT NUMBER:";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          doc.setFont("helvetica", "bold");
+          doc.text("USD ACCOUNT NUMBER:", 10, currentY);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(inv.accountNumber, pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         if (inv.intermediaryBank) {
-          doc.text(`INTERMEDIARY BANK (if you need): ${inv.intermediaryBank}`, 10, currentY);
-          // Draw thin black underline only for the heading
-          const headingText = "INTERMEDIARY BANK (if you need):";
-          const headingWidth = doc.getTextWidth(headingText);
-          doc.setDrawColor(0, 0, 0); // Black color
-          doc.setLineWidth(0.1); // Thin line
-          doc.line(10, currentY + 1, 10 + headingWidth, currentY + 1);
+          doc.setFont("helvetica", "bold");
+          doc.text("INTERMEDIARY BANK (if you need):", 10, currentY);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(inv.intermediaryBank, pageWidth - 20);
           currentY += 5;
+          doc.text(valueLines, 10, currentY);
+          currentY += valueLines.length * 5;
         }
         currentY += 5;
       }
