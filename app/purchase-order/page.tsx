@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout" // Ensure this path and export are correct
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { purchaseOrdersAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -338,7 +338,7 @@ export default function PurchaseOrdersPage() {
       // Purchase Order details (right side)
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(`PO Date: ${po.date}`, pageWidth - 25, 35, { align: "right" });
+      doc.text(`PO Date: ${formatDisplayDate(po.date, "")}`, pageWidth - 25, 35, { align: "right" });
   
       // Sender Information (Left side - Company details)
       doc.setFontSize(11);
@@ -427,7 +427,7 @@ export default function PurchaseOrdersPage() {
 
         doc.text(`${index + 1}`, colX.rowNo, y);
         doc.text(item.itemName || '', colX.description, y);
-        doc.text(po.date || '', colX.date, y);
+        doc.text(formatDisplayDate(po.date, ''), colX.date, y);
         doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
         doc.text(`${getCurrencySymbol(po.currency)}${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice - 8, y, { align: "center" });
         doc.text(`${getCurrencySymbol(po.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount - 2, y, { align: "right" });
@@ -586,7 +586,7 @@ export default function PurchaseOrdersPage() {
                         {po.supplierPhone || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {po.date}
+                        {formatDisplayDate(po.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {getCurrencySymbol(po.currency)}{calculatePurchaseOrderTotal(po).toFixed(2)}
@@ -652,7 +652,7 @@ export default function PurchaseOrdersPage() {
                         {po.supplierPhone && (
                           <p className="text-gray-500 text-sm">Phone: {po.supplierPhone}</p>
                         )}
-                        <p className="text-gray-500 text-sm">Date: {po.date}</p>
+                        <p className="text-gray-500 text-sm">Date: {formatDisplayDate(po.date)}</p>
                         <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(po.currency)}{calculatePurchaseOrderTotal(po).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {po.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">

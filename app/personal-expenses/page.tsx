@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { personalExpensesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { formatDisplayDate } from "@/lib/utils"
 
 interface PersonalExpense {
   id: string
@@ -478,7 +479,7 @@ export default function PersonalExpensesPage() {
                         {expense.currency}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base border border-gray-300">
-                        {expense.date}
+                        {formatDisplayDate(expense.date)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
                         <div className="flex space-x-2">

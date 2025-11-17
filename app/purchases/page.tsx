@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { purchasesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { formatDisplayDate } from "@/lib/utils"
 
 interface Purchase {
   id: string
@@ -374,7 +375,7 @@ export default function PurchasesPage() {
                   currentItems.map((purchase) => (
                     <tr key={purchase.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {purchase.date}
+                        {formatDisplayDate(purchase.date)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {purchase.supplier}

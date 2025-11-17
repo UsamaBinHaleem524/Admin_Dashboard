@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { salesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { formatDisplayDate } from "@/lib/utils"
 
 interface Sale {
   id: string
@@ -374,7 +375,7 @@ export default function SalesPage() {
                   currentItems.map((sale) => (
                     <tr key={sale.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {sale.date}
+                        {formatDisplayDate(sale.date)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base">
                         {sale.customer}

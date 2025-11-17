@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { invoicesAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -410,7 +410,7 @@ export default function InvoicesPage() {
       // Invoice details (right side)
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(`Invoice Date: ${inv.date}`, pageWidth - 25, 35, { align: "right" });
+      doc.text(`Invoice Date: ${formatDisplayDate(inv.date, "")}`, pageWidth - 25, 35, { align: "right" });
   
       // Sender Information (Left side - Company details)
       doc.setFontSize(11);
@@ -524,7 +524,7 @@ export default function InvoicesPage() {
          doc.text(itemNameLines[0], colX.description, y);
          
          // Draw other columns on the first line
-         doc.text(inv.date || '', colX.date, y);
+        doc.text(formatDisplayDate(inv.date, ''), colX.date, y);
          doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
          doc.text(item.unit || '', colX.unit, y);
          doc.text(`US$${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y, { align: "right" });
@@ -839,7 +839,7 @@ export default function InvoicesPage() {
                         {inv.invoiceType}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {inv.date}
+                        {formatDisplayDate(inv.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         {getCurrencySymbol(inv.currency)}{calculateInvoiceTotal(inv).toFixed(2)}
@@ -917,7 +917,7 @@ export default function InvoicesPage() {
                         <p className="text-gray-500 text-sm">Address: {inv.customerAddress || "-"}</p>
                         <p className="text-gray-500 text-sm">Phone: {inv.customerPhone || "-"}</p>
                         <p className="text-gray-500 text-sm">Type: {inv.invoiceType}</p>
-                        <p className="text-gray-500 text-sm">Date: {inv.date}</p>
+                        <p className="text-gray-500 text-sm">Date: {formatDisplayDate(inv.date)}</p>
                         <p className="text-gray-500 text-sm">Total: {getCurrencySymbol(inv.currency)}{calculateInvoiceTotal(inv).toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {inv.currency}</p>
                         <ul className="list-disc list-inside text-gray-500 text-sm">

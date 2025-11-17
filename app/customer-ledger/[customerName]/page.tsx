@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, ArrowLeft, Calendar, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { customerTransactionsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -351,7 +351,7 @@ export default function CustomerDetailPage() {
       
       doc.setFontSize(10)
       doc.setFont("helvetica", "normal")
-      doc.text(`Report Date: ${new Date().toLocaleDateString()}`, 15, 70)
+      doc.text(`Report Date: ${formatDisplayDate(new Date(), "")}`, 15, 70)
       doc.text(`Total Transactions: ${transactionsToExport.length}`, 15, 80)
 
       // Company Information (right side)
@@ -443,7 +443,7 @@ export default function CustomerDetailPage() {
         doc.text(descriptionLines[0], colX.description, yPosition)
         
         // Draw other columns on the first line
-        doc.text(transaction.date, colX.date, yPosition)
+        doc.text(formatDisplayDate(transaction.date, ""), colX.date, yPosition)
         doc.text(transaction.currency, colX.currency, yPosition)
         doc.text(debit > 0 ? `${getCurrencySymbol(transaction.currency)}${debit.toFixed(2)}` : "-", colX.debit, yPosition, { align: "right" })
         doc.text(credit > 0 ? `${getCurrencySymbol(transaction.currency)}${credit.toFixed(2)}` : "-", colX.credit, yPosition, { align: "right" })
@@ -856,7 +856,7 @@ export default function CustomerDetailPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {transaction.date}
+                          {formatDisplayDate(transaction.date)}
                         </div>
                       </td>
                       <td className="px-6 py-4">

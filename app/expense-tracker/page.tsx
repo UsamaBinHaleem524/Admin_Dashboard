@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { expensesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -461,7 +461,7 @@ export default function ExpenseTrackerPage() {
                   currentItems.map((expense) => (
                     <tr key={expense.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap font-medium text-gray-900 text-sm sm:text-base border border-gray-300">
-                        {expense.date}
+                        {formatDisplayDate(expense.date)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-gray-500 text-sm sm:text-base border border-gray-300">
                         {expense.description}
@@ -503,7 +503,7 @@ export default function ExpenseTrackerPage() {
                   <div key={expense.id} className="p-4 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">Date: {expense.date}</p>
+                        <p className="font-medium text-gray-900 text-sm">Date: {formatDisplayDate(expense.date)}</p>
                         <p className="text-gray-500 text-sm">Description: {expense.description}</p>
                         <p className="text-gray-500 text-sm">Amount: {getCurrencySymbol(expense.currency)}{expense.amount.toFixed(2)}</p>
                         <p className="text-gray-500 text-sm">Currency: {expense.currency}</p>

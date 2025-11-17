@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Search, Eye, Plus } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { customerTransactionsAPI } from "@/lib/api"
 import { Pagination } from "@/components/ui/pagination"
 import { useRouter } from "next/navigation"
@@ -257,7 +257,7 @@ export default function CustomerLedgerPage() {
                         {getCurrencySymbol(customer.currency)}{customer.currentBalance.toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {customer.lastTransactionDate}
+                        {formatDisplayDate(customer.lastTransactionDate)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button

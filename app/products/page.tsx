@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -230,7 +230,7 @@ export default function ProductsPage() {
                         {product.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {product.date}
+                        {formatDisplayDate(product.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex space-x-2">
@@ -266,7 +266,7 @@ export default function ProductsPage() {
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{product.id}</p>
                         <p className="text-gray-500 text-sm">{product.name}</p>
-                        <p className="text-gray-500 text-sm">{product.date}</p>
+                        <p className="text-gray-500 text-sm">{formatDisplayDate(product.date)}</p>
                       </div>
                       <div className="flex space-x-2">
                         <button

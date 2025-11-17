@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, Download } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { quotationsAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -286,7 +286,7 @@ export default function QuotationsPage() {
       // Quotation details (right side)
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(`Quotation Date: ${q.date}`, pageWidth - 25, 35, { align: "right" });
+      doc.text(`Quotation Date: ${formatDisplayDate(q.date, "")}`, pageWidth - 25, 35, { align: "right" });
       doc.text(`Type: ${q.customerSupplierDetails === 'customer' ? 'Customer' : 'Supplier'}`, pageWidth - 25, 45, { align: "right" });
   
       // Sender Information (Left side - Company details)
@@ -373,7 +373,7 @@ export default function QuotationsPage() {
 
         doc.text(`${index + 1}`, colX.rowNo, y);
         doc.text(item.itemName || '', colX.itemName, y);
-        doc.text(q.date || '', colX.date, y);
+        doc.text(formatDisplayDate(q.date, ''), colX.date, y);
         doc.text(q.currency || '', colX.currency, y);
         doc.text(`${getCurrencySymbol(q.currency)}${(item.amount || 0).toFixed(2)}`, colX.amount, y, { align: "right" });
   
@@ -524,7 +524,7 @@ export default function QuotationsPage() {
                         {q.userDefinedId}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
-                        {q.date}
+                        {formatDisplayDate(q.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm sm:text-base">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -602,7 +602,7 @@ export default function QuotationsPage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{q.userDefinedId}</p>
-                        <p className="text-gray-500 text-sm">Date: {q.date}</p>
+                        <p className="text-gray-500 text-sm">Date: {formatDisplayDate(q.date)}</p>
                         <p className="text-gray-500 text-sm">
                           Type: <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             q.customerSupplierDetails === 'customer' 

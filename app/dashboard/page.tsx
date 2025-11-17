@@ -1,6 +1,7 @@
 "use client"
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { formatDisplayDate } from "@/lib/utils"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts"
 import { DollarSign, ShoppingCart, Package, TrendingUp } from "lucide-react"
 
@@ -126,7 +127,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-right">
                   <p className="font-medium">${activity.amount.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">{activity.date}</p>
+                  <p className="text-sm text-gray-600">{formatDisplayDate(activity.date)}</p>
                 </div>
               </div>
             ))}

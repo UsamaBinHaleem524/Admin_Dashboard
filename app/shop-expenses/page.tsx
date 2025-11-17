@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Plus, Edit, Trash2, Search, Calendar } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
-import { cn } from "@/lib/utils"
+import { cn, formatDisplayDate } from "@/lib/utils"
 import { shopExpensesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
@@ -603,7 +603,7 @@ export default function ShopExpensesPage() {
                         {indexOfFirstItem + index + 1}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300">
-                        {expense.date}
+                        {formatDisplayDate(expense.date)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900 border border-gray-300">
                         {expense.description || expense.incomingDescription || expense.outgoingDescription || "-"}
