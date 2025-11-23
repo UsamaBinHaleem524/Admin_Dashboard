@@ -453,7 +453,7 @@ export default function InvoicesPage() {
         rowNo: 15,
         description: 35,
         date: 85,
-        qty: 110,
+        qty: 120,
         unit: 125,
         unitPrice: 155,
         vat: 170,
@@ -520,12 +520,16 @@ export default function InvoicesPage() {
          const maxItemNameWidth = colX.date - colX.description - 2; // Leave 2 units margin
          const itemNameLines = doc.splitTextToSize(itemName, maxItemNameWidth);
          
-         // Draw the first line of item name
-         doc.text(itemNameLines[0], colX.description, y);
-         
-         // Draw other columns on the first line
-        doc.text(formatDisplayDate(inv.date, ''), colX.date, y);
-         doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
+        // Draw the first line of item name
+        doc.text(itemNameLines[0], colX.description, y);
+        
+        // Draw other columns on the first line
+        // Constrain date width to prevent overflow into Qty column
+        const dateText = formatDisplayDate(inv.date, '');
+        const maxDateWidth = colX.qty - colX.date - 3; // Leave 3 units margin before Qty
+        const dateLines = doc.splitTextToSize(dateText, maxDateWidth);
+        doc.text(dateLines[0], colX.date, y);
+        doc.text((item.quantity || 0).toString(), colX.qty, y, { align: "right" });
          doc.text(item.unit || '', colX.unit, y);
          doc.text(`US$${(item.unitPrice || 0).toFixed(2)}`, colX.unitPrice, y, { align: "right" });
          doc.text(`${(item.vatPercentage || 0).toFixed(2)}%`, colX.vat, y, { align: "right" });
@@ -1088,8 +1092,8 @@ export default function InvoicesPage() {
                     id="date"
                     type="date"
                     value={formData.date}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
                 </div>
                 
