@@ -76,7 +76,8 @@ export async function POST(request) {
     const sale = new Sale({
       ...data,
       amount: Number(data.amount) || 0,
-      currency: data.currency || 'USD'
+      currency: data.currency || 'USD',
+      khataId: data.khataId || null,
     });
     await sale.save();
     
@@ -98,10 +99,11 @@ export async function PUT(request) {
     
     const sale = await Sale.findOneAndUpdate(
       { id: data.id },
-      { 
+      {
         ...data,
         amount: Number(data.amount) || 0,
-        currency: data.currency || 'USD'
+        currency: data.currency || 'USD',
+        khataId: data.khataId || null,
       },
       { new: true, runValidators: true }
     );
