@@ -85,6 +85,7 @@ export async function POST(request) {
     
     const shopExpense = new ShopExpense({
       ...data,
+      folio: data.folio || '',
       incomingDescription: data.incomingDescription || '',
       outgoingDescription: data.outgoingDescription || '',
       previousAmount,
@@ -119,8 +120,9 @@ export async function PUT(request) {
     
     const shopExpense = await ShopExpense.findOneAndUpdate(
       { id: data.id },
-      { 
+      {
         ...data,
+        folio: data.folio || '',
         incomingDescription: data.incomingDescription || '',
         outgoingDescription: data.outgoingDescription || '',
         previousAmount,

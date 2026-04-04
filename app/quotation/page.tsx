@@ -385,19 +385,6 @@ export default function QuotationsPage() {
       doc.setLineWidth(0.5);
       doc.line(10, y + 2, pageWidth - 10, y + 2);
   
-      // Summary Section (Right side) - Fixed layout
-      const summaryX = pageWidth - 80;
-      const summaryY = y + 10;
-      
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      
-      doc.text("Total Amount:", summaryX+20, summaryY);
-      
-      doc.setFont("helvetica", "normal");
-      const finalTotal = q.totalAmount || 0;
-      doc.text(`${getCurrencySymbol(q.currency)}${finalTotal.toFixed(2)}`, colX.amount, summaryY, { align: "right" });
-  
       // Footer - Centered with proper styling
       const footerY = pageHeight - 20;
       doc.setFontSize(9);

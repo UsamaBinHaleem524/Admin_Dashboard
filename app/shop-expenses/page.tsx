@@ -3,10 +3,10 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Plus, Edit, Trash2, Search, Calendar } from "lucide-react"
+import { Edit, Trash2, Search, Check } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
 import { cn, formatDisplayDate } from "@/lib/utils"
-import { shopExpensesAPI } from "@/lib/api"
+import { shopExpensesAPI, settingsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
 
@@ -16,6 +16,7 @@ interface ShopExpense {
   incomingDescription: string
   outgoingDescription: string
   date: string
+  folio?: string
   previousAmount: number
   income: number
   outgoingAmount: number
@@ -33,6 +34,9 @@ export default function ShopExpensesPage() {
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedYear, setSelectedYear] = useState("")
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR' | 'CNY'>("USD")
+  const [availableBalance, setAvailableBalance] = useState<string>("")
+  const [availableBalanceEdit, setAvailableBalanceEdit] = useState(false)
+  const [availableBalanceDraft, setAvailableBalanceDraft] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -44,8 +48,8 @@ export default function ShopExpensesPage() {
   })
   const [formData, setFormData] = useState({
     description: "",
+    folio: "",
     date: new Date().toISOString().split('T')[0],
-    previousAmount: "",
     income: "",
     outgoingAmount: "",
     currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
@@ -54,6 +58,9 @@ export default function ShopExpensesPage() {
 
   useEffect(() => {
     loadShopExpenses()
+    settingsAPI.get('shopAvailableBalance').then((s: { value: string }) => {
+      if (s?.value) setAvailableBalance(s.value)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -122,20 +129,20 @@ export default function ShopExpensesPage() {
       return
     }
 
-    const previousAmount = Number.parseFloat(formData.previousAmount) || 0
     const income = Number.parseFloat(formData.income) || 0
     const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
 
     const shopExpenseData: ShopExpense = {
       id: editingShopExpense ? editingShopExpense.id : Date.now().toString(),
       description: formData.description,
-      incomingDescription: '', // Keep for backward compatibility
-      outgoingDescription: formData.description, // Keep for backward compatibility
+      folio: formData.folio,
+      incomingDescription: '',
+      outgoingDescription: formData.description,
       date: formData.date,
-      previousAmount,
+      previousAmount: 0,
       income,
       outgoingAmount,
-      totalCash: (previousAmount + income) - outgoingAmount,
+      totalCash: income - outgoingAmount,
       currency: formData.currency,
     }
 
@@ -162,8 +169,8 @@ export default function ShopExpensesPage() {
     const description = shopExpense.description || shopExpense.incomingDescription || shopExpense.outgoingDescription || ""
     setFormData({
       description: description,
+      folio: shopExpense.folio || "",
       date: shopExpense.date,
-      previousAmount: (shopExpense.previousAmount || 0).toString(),
       income: (shopExpense.income || 0).toString(),
       outgoingAmount: (shopExpense.outgoingAmount || 0).toString(),
       currency: shopExpense.currency || "USD",
@@ -193,8 +200,8 @@ export default function ShopExpensesPage() {
   const resetForm = () => {
     setFormData({
       description: "",
+      folio: "",
       date: new Date().toISOString().split('T')[0],
-      previousAmount: "",
       income: "",
       outgoingAmount: "",
       currency: "USD",
@@ -274,13 +281,6 @@ export default function ShopExpensesPage() {
     return breakdown
   }
 
-  const calculateTotalCash = () => {
-    const previousAmount = Number.parseFloat(formData.previousAmount) || 0
-    const income = Number.parseFloat(formData.income) || 0
-    const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
-    return (previousAmount + income) - outgoingAmount
-  }
-
   return (
     <DashboardLayout>
       <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -289,147 +289,128 @@ export default function ShopExpensesPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Shop Expenses</h1>
             <p className="text-sm sm:text-base text-gray-600">Manage shop expenses and cash flow</p>
           </div>
-
+          <div className="flex items-center gap-2 bg-white rounded-lg shadow px-4 py-3">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Available Balance:</label>
+            {availableBalanceEdit ? (
+              <>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={availableBalanceDraft}
+                  onChange={(e) => setAvailableBalanceDraft(e.target.value)}
+                  placeholder="0.00"
+                  className="w-36 px-3 py-1.5 border border-blue-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold"
+                  autoFocus
+                />
+                <button
+                  onClick={async () => {
+                    try {
+                      await settingsAPI.set('shopAvailableBalance', availableBalanceDraft)
+                      setAvailableBalance(availableBalanceDraft)
+                      setAvailableBalanceEdit(false)
+                      showToast("Balance saved!", "success")
+                    } catch {
+                      showToast("Failed to save balance", "error")
+                    }
+                  }}
+                  className="p-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                  title="Save"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="w-36 px-3 py-1.5 border border-gray-200 rounded-md bg-gray-50 text-sm font-semibold text-gray-800">
+                  {availableBalance ? Number(availableBalance).toFixed(2) : "—"}
+                </span>
+                {availableBalance ? (
+                  <button
+                    onClick={() => { setAvailableBalanceDraft(availableBalance); setAvailableBalanceEdit(true) }}
+                    className="p-1.5 text-blue-600 hover:text-blue-800 transition-colors"
+                    title="Edit"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setAvailableBalanceDraft(""); setAvailableBalanceEdit(true) }}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm transition-colors"
+                  >
+                    Add
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Total Income</p>
-              <p className="text-2xl font-bold text-green-600">
-                {getCurrencySymbol(displayCurrency)}{getTotalIncome().toFixed(2)}
-              </p>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Total Outgoing</p>
-              <p className="text-2xl font-bold text-red-600">
-                {getCurrencySymbol(displayCurrency)}{getTotalOutgoing().toFixed(2)}
-              </p>
-            </div>
-          </div>
+        {/* Summary Cards - commented out */}
+        {/* <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-center">
               <p className="text-sm font-medium text-gray-600">Total Cash</p>
-              <p className={cn(
-                "text-2xl font-bold",
-                getTotalCash() >= 0 ? "text-blue-600" : "text-red-600"
-              )}>
+              <p className="text-2xl font-bold">
                 {getCurrencySymbol(displayCurrency)}{getTotalCash().toFixed(2)}
               </p>
             </div>
           </div>
-        </div>
+        </div> */}
 
-        {/* Currency Breakdown */}
-        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Income Breakdown */}
-            <div>
-              <h4 className="text-md font-medium text-green-600 mb-3">Income by Currency</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <div>
-                    <p className="text-sm font-medium text-blue-600">USD Income</p>
-                    <p className="text-xl font-bold text-blue-700">
-                      ${getCurrencyBreakdown().income.USD.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <div>
-                    <p className="text-sm font-medium text-green-600">PKR Income</p>
-                    <p className="text-xl font-bold text-green-700">
-                      ₨{getCurrencyBreakdown().income.PKR.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <div>
-                    <p className="text-sm font-medium text-purple-600">SAR Income</p>
-                    <p className="text-xl font-bold text-purple-700">
-                      ر.س{getCurrencyBreakdown().income.SAR.toFixed(2)}
-                    </p>
-                  </div>
+        {/* Currency Breakdown and Summary Cards - hidden */}
+        {false && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="text-center">
+                  <p className="text-sm font-medium text-gray-600">Total Cash</p>
+                  <p className="text-2xl font-bold">
+                    {getCurrencySymbol(displayCurrency)}{getTotalCash().toFixed(2)}
+                  </p>
                 </div>
               </div>
             </div>
-            
-            {/* Outgoing Breakdown */}
-            <div>
-              <h4 className="text-md font-medium text-red-600 mb-3">Outgoing by Currency</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <div>
-                    <p className="text-sm font-medium text-blue-600">USD Outgoing</p>
-                    <p className="text-xl font-bold text-blue-700">
-                      ${getCurrencyBreakdown().outgoing.USD.toFixed(2)}
-                    </p>
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-md font-medium text-green-600 mb-3">Income by Currency</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-blue-600">USD Income</p>
+                      <p className="text-xl font-bold text-blue-700">${getCurrencyBreakdown().income.USD.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-green-600">PKR Income</p>
+                      <p className="text-xl font-bold text-green-700">₨{getCurrencyBreakdown().income.PKR.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-purple-600">SAR Income</p>
+                      <p className="text-xl font-bold text-purple-700">ر.س{getCurrencyBreakdown().income.SAR.toFixed(2)}</p>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <div>
-                    <p className="text-sm font-medium text-green-600">PKR Outgoing</p>
-                    <p className="text-xl font-bold text-green-700">
-                      ₨{getCurrencyBreakdown().outgoing.PKR.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <div>
-                    <p className="text-sm font-medium text-purple-600">SAR Outgoing</p>
-                    <p className="text-xl font-bold text-purple-700">
-                      ر.س{getCurrencyBreakdown().outgoing.SAR.toFixed(2)}
-                    </p>
+                <div>
+                  <h4 className="text-md font-medium text-red-600 mb-3">Outgoing by Currency</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-blue-600">USD Outgoing</p>
+                      <p className="text-xl font-bold text-blue-700">${getCurrencyBreakdown().outgoing.USD.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-green-600">PKR Outgoing</p>
+                      <p className="text-xl font-bold text-green-700">₨{getCurrencyBreakdown().outgoing.PKR.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-purple-600">SAR Outgoing</p>
+                      <p className="text-xl font-bold text-purple-700">ر.س{getCurrencyBreakdown().outgoing.SAR.toFixed(2)}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Total Cash Breakdown */}
-          {/* <div className="mt-6">
-            <h4 className="text-md font-medium text-blue-600 mb-3">Total Cash by Currency</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-blue-50 rounded-lg p-4">
-                <div>
-                  <p className="text-sm font-medium text-blue-600">USD Cash</p>
-                  <p className={cn(
-                    "text-xl font-bold",
-                    getCurrencyBreakdown().totalCash.USD >= 0 ? "text-blue-700" : "text-red-700"
-                  )}>
-                    ${getCurrencyBreakdown().totalCash.USD.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-              <div className="bg-green-50 rounded-lg p-4">
-                <div>
-                  <p className="text-sm font-medium text-green-600">PKR Cash</p>
-                  <p className={cn(
-                    "text-xl font-bold",
-                    getCurrencyBreakdown().totalCash.PKR >= 0 ? "text-green-700" : "text-red-700"
-                  )}>
-                    ₨{getCurrencyBreakdown().totalCash.PKR.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-              <div className="bg-purple-50 rounded-lg p-4">
-                <div>
-                  <p className="text-sm font-medium text-purple-600">SAR Cash</p>
-                  <p className={cn(
-                    "text-xl font-bold",
-                    getCurrencyBreakdown().totalCash.SAR >= 0 ? "text-purple-700" : "text-red-700"
-                  )}>
-                    ر.س{getCurrencyBreakdown().totalCash.SAR.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div> */}
-        </div>
+        )}
 
         {/* Currency Selector */}
         <div className="bg-white rounded-lg shadow p-4">
@@ -567,16 +548,13 @@ export default function ShopExpensesPage() {
                     Description
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                    Previous Amount
+                    Folio
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Income
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Outgoing Amount
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                    Total Cash
                   </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Actions
@@ -586,13 +564,13 @@ export default function ShopExpensesPage() {
               <tbody className="bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
+                    <td colSpan={7} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
                       Loading...
                     </td>
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
+                    <td colSpan={7} className="px-4 sm:px-6 py-4 text-center text-gray-500 border border-gray-300">
                       No shop expenses found
                     </td>
                   </tr>
@@ -608,20 +586,14 @@ export default function ShopExpensesPage() {
                       <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900 border border-gray-300">
                         {expense.description || expense.incomingDescription || expense.outgoingDescription || "-"}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
-                        {getCurrencySymbol(expense.currency)}{(expense.previousAmount || 0).toFixed(2)}
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 border border-gray-300">
+                        {expense.folio || "-"}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium border border-gray-300">
                         {getCurrencySymbol(expense.currency)}{(expense.income || 0).toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-red-600 font-medium border border-gray-300">
                         {getCurrencySymbol(expense.currency)}{(expense.outgoingAmount || 0).toFixed(2)}
-                      </td>
-                      <td className={cn(
-                        "px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300",
-                        (expense.totalCash || 0) >= 0 ? "text-blue-600" : "text-red-600"
-                      )}>
-                        {getCurrencySymbol(expense.currency)}{(expense.totalCash || 0).toFixed(2)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300">
                         <div className="flex items-center space-x-2">
@@ -667,13 +639,11 @@ export default function ShopExpensesPage() {
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.previousAmount}
-                      onChange={(e) => setFormData({ ...formData, previousAmount: e.target.value })}
+                      type="text"
+                      value={formData.folio}
+                      onChange={(e) => setFormData({ ...formData, folio: e.target.value })}
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="0.00"
+                      placeholder="Folio"
                     />
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
@@ -698,12 +668,6 @@ export default function ShopExpensesPage() {
                       placeholder="0.00"
                     />
                   </td>
-                  <td className={cn(
-                    "px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300",
-                    calculateTotalCash() >= 0 ? "text-blue-600" : "text-red-600"
-                  )}>
-                    {getCurrencySymbol(formData.currency)}{calculateTotalCash().toFixed(2)}
-                  </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
                     <div className="flex items-center space-x-2">
                       <select
@@ -723,20 +687,20 @@ export default function ShopExpensesPage() {
                             return
                           }
                           try {
-                            const previousAmount = Number.parseFloat(formData.previousAmount) || 0
                             const income = Number.parseFloat(formData.income) || 0
                             const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
 
                             const shopExpenseData: ShopExpense = {
                               id: Date.now().toString(),
                               description: formData.description,
+                              folio: formData.folio,
                               incomingDescription: '',
                               outgoingDescription: formData.description,
                               date: formData.date,
-                              previousAmount,
+                              previousAmount: 0,
                               income,
                               outgoingAmount,
-                              totalCash: (previousAmount + income) - outgoingAmount,
+                              totalCash: income - outgoingAmount,
                               currency: formData.currency,
                             }
                             
@@ -790,15 +754,23 @@ export default function ShopExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Previous Amount</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.previousAmount}
-                    onChange={(e) => setFormData({ ...formData, previousAmount: e.target.value })}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
+                    placeholder="Enter description"
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Folio</label>
+                  <input
+                    type="text"
+                    value={formData.folio}
+                    onChange={(e) => setFormData({ ...formData, folio: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter folio"
                   />
                 </div>
                 <div>
@@ -823,25 +795,6 @@ export default function ShopExpensesPage() {
                     onChange={(e) => setFormData({ ...formData, outgoingAmount: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter description"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Cash (Calculated)</label>
-                  <input
-                    type="text"
-                    value={`${getCurrencySymbol(formData.currency)}${calculateTotalCash().toFixed(2)}`}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
                   />
                 </div>
                 <div>
