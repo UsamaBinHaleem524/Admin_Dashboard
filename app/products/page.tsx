@@ -9,6 +9,7 @@ import { cn, formatDisplayDate } from "@/lib/utils"
 import { productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 
 interface Product {
   id: string
@@ -326,12 +327,12 @@ export default function ProductsPage() {
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
                   </label>
-                  <input
+                  <DateInput
                     id="date"
-                    type="date"
                     value={formData.date}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
+                    disabled
+                    className="bg-gray-100 text-sm"
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">

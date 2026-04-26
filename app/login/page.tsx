@@ -10,18 +10,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [showPassword, setShowPassword] = useState(false) // State to toggle password visibility
+  const [showPassword, setShowPassword] = useState(false)
   const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
-    const lowerUsername = username.toLowerCase()
-    const lowerPassword = password.toLowerCase()
-    await new Promise((resolve) => setTimeout(resolve, 500))
 
-    const success = login(lowerUsername, lowerPassword)
+    const success = await login(username, password)
     if (!success) {
       setError("Invalid credentials! Please try again.")
     }
@@ -91,15 +88,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-sm text-gray-600 text-center">
-            <p className="mb-2">Demo credentials:</p>
-            <p>
-              Username: <strong>admin</strong>
-            </p>
-            <p>
-              Password: <strong>admin123</strong>
-            </p>
-          </div>
         </div>
       </div>
     </div>

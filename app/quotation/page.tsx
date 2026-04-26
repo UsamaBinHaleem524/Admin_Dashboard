@@ -9,6 +9,7 @@ import { cn, formatDisplayDate } from "@/lib/utils"
 import { quotationsAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 import jsPDF from "jspdf"
 import { getCompanyProfile, getDefaultCompanyProfile } from "@/lib/company-profile-utils"
 
@@ -178,6 +179,17 @@ export default function QuotationsPage() {
 
     if (!formData.customerSupplierName) {
       showToast(`Please enter ${formData.customerSupplierDetails === 'customer' ? 'customer' : 'supplier'} name`, "error")
+      return
+    }
+
+    // Validate that no amount fields are negative
+    const hasNegativeValues = formData.items.some(item => {
+      const amount = Number.parseFloat(item.amount)
+      return amount < 0
+    })
+
+    if (hasNegativeValues) {
+      showToast("Amount cannot be negative", "error")
       return
     }
 
@@ -761,12 +773,12 @@ export default function QuotationsPage() {
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
                   </label>
-                  <input
+                  <DateInput
                     id="date"
-                    type="date"
                     value={formData.date}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-sm"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
+                    disabled
+                    className="bg-gray-100 text-sm"
                   />
                 </div>
                 <div>
@@ -800,6 +812,7 @@ export default function QuotationsPage() {
                             id={`amount-${index}`}
                             type="number"
                             step="0.01"
+                            min="0"
                             value={item.amount}
                             onChange={(e) => handleItemChange(index, "amount", e.target.value)}
                             placeholder="Enter amount"

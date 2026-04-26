@@ -9,6 +9,7 @@ import { cn, formatDisplayDate } from "@/lib/utils"
 import { expensesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 
 interface Expense {
   id: string
@@ -337,11 +338,10 @@ export default function ExpenseTrackerPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
                 <div className="flex items-center space-x-2 flex-shrink-0">
                   <label className="text-sm font-medium text-gray-700">Date:</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setSelectedDate(value)}
+                    className="text-sm"
                   />
                   {selectedDate && (
                     <button
@@ -552,12 +552,12 @@ export default function ExpenseTrackerPage() {
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
                   </label>
-                  <input
+                  <DateInput
                     id="date"
-                    type="date"
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
+                    className="text-sm"
+                    required
                   />
                 </div>
                 <div>

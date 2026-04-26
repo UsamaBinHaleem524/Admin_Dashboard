@@ -9,6 +9,7 @@ import { cn, formatDisplayDate } from "@/lib/utils"
 import { shopExpensesAPI, settingsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 
 interface ShopExpense {
   id: string
@@ -34,9 +35,24 @@ export default function ShopExpensesPage() {
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedYear, setSelectedYear] = useState("")
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'PKR' | 'SAR' | 'CNY'>("USD")
-  const [availableBalance, setAvailableBalance] = useState<string>("")
-  const [availableBalanceEdit, setAvailableBalanceEdit] = useState(false)
-  const [availableBalanceDraft, setAvailableBalanceDraft] = useState("")
+  const [availableBalances, setAvailableBalances] = useState<{
+    USD: string
+    PKR: string
+    SAR: string
+    CNY: string
+  }>({ USD: "", PKR: "", SAR: "", CNY: "" })
+  const [availableBalanceEdit, setAvailableBalanceEdit] = useState<{
+    USD: boolean
+    PKR: boolean
+    SAR: boolean
+    CNY: boolean
+  }>({ USD: false, PKR: false, SAR: false, CNY: false })
+  const [availableBalanceDraft, setAvailableBalanceDraft] = useState<{
+    USD: string
+    PKR: string
+    SAR: string
+    CNY: string
+  }>({ USD: "", PKR: "", SAR: "", CNY: "" })
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -58,10 +74,33 @@ export default function ShopExpensesPage() {
 
   useEffect(() => {
     loadShopExpenses()
-    settingsAPI.get('shopAvailableBalance').then((s: { value: string }) => {
-      if (s?.value) setAvailableBalance(s.value)
-    }).catch(() => {})
   }, [])
+
+  // Load available balances when selected date changes
+  useEffect(() => {
+    loadAvailableBalances()
+  }, [selectedDate])
+
+  const loadAvailableBalances = async () => {
+    if (!selectedDate) return
+    
+    const currencies: Array<'USD' | 'PKR' | 'SAR' | 'CNY'> = ['USD', 'PKR', 'SAR', 'CNY']
+    const balances = { USD: "", PKR: "", SAR: "", CNY: "" }
+    
+    for (const currency of currencies) {
+      try {
+        const key = `shopAvailableBalance_${selectedDate}_${currency}`
+        const result = await settingsAPI.get(key)
+        if (result?.value) {
+          balances[currency] = result.value
+        }
+      } catch {
+        // Balance doesn't exist for this date/currency combination
+      }
+    }
+    
+    setAvailableBalances(balances)
+  }
 
   useEffect(() => {
     filterShopExpenses()
@@ -131,6 +170,11 @@ export default function ShopExpensesPage() {
 
     const income = Number.parseFloat(formData.income) || 0
     const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
+
+    if (income < 0 || outgoingAmount < 0) {
+      showToast("Income and outgoing amount cannot be negative", "error")
+      return
+    }
 
     const shopExpenseData: ShopExpense = {
       id: editingShopExpense ? editingShopExpense.id : Date.now().toString(),
@@ -284,65 +328,88 @@ export default function ShopExpensesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Shop Expenses</h1>
-            <p className="text-sm sm:text-base text-gray-600">Manage shop expenses and cash flow</p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Shop Expenses</h1>
+              <p className="text-sm sm:text-base text-gray-600">Manage shop expenses and cash flow</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-white rounded-lg shadow px-4 py-3">
-            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Available Balance:</label>
-            {availableBalanceEdit ? (
-              <>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={availableBalanceDraft}
-                  onChange={(e) => setAvailableBalanceDraft(e.target.value)}
-                  placeholder="0.00"
-                  className="w-36 px-3 py-1.5 border border-blue-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold"
-                  autoFocus
-                />
-                <button
-                  onClick={async () => {
-                    try {
-                      await settingsAPI.set('shopAvailableBalance', availableBalanceDraft)
-                      setAvailableBalance(availableBalanceDraft)
-                      setAvailableBalanceEdit(false)
-                      showToast("Balance saved!", "success")
-                    } catch {
-                      showToast("Failed to save balance", "error")
-                    }
-                  }}
-                  className="p-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                  title="Save"
-                >
-                  <Check className="h-4 w-4" />
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="w-36 px-3 py-1.5 border border-gray-200 rounded-md bg-gray-50 text-sm font-semibold text-gray-800">
-                  {availableBalance ? Number(availableBalance).toFixed(2) : "—"}
-                </span>
-                {availableBalance ? (
-                  <button
-                    onClick={() => { setAvailableBalanceDraft(availableBalance); setAvailableBalanceEdit(true) }}
-                    className="p-1.5 text-blue-600 hover:text-blue-800 transition-colors"
-                    title="Edit"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => { setAvailableBalanceDraft(""); setAvailableBalanceEdit(true) }}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm transition-colors"
-                  >
-                    Add
-                  </button>
-                )}
-              </>
-            )}
-          </div>
+
+          {/* Available Balances for Selected Date */}
+          {selectedDate && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">
+                  Available Balance for {formatDisplayDate(selectedDate)}
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {(['USD', 'PKR', 'SAR', 'CNY'] as const).map((currency) => {
+                  const currencySymbols = { USD: "$", PKR: "₨", SAR: "ر.س", CNY: "¥" }
+                  return (
+                    <div key={currency} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-gray-600">{currency}</label>
+                        {!availableBalanceEdit[currency] && (
+                          <button
+                            onClick={() => {
+                              setAvailableBalanceDraft({ ...availableBalanceDraft, [currency]: availableBalances[currency] })
+                              setAvailableBalanceEdit({ ...availableBalanceEdit, [currency]: true })
+                            }}
+                            className="text-blue-600 hover:text-blue-800 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      {availableBalanceEdit[currency] ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={availableBalanceDraft[currency]}
+                            onChange={(e) => setAvailableBalanceDraft({ ...availableBalanceDraft, [currency]: e.target.value })}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1 text-sm border border-blue-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={async () => {
+                              try {
+                                const balance = Number.parseFloat(availableBalanceDraft[currency])
+                                if (balance < 0) {
+                                  showToast("Balance cannot be negative", "error")
+                                  return
+                                }
+                                const key = `shopAvailableBalance_${selectedDate}_${currency}`
+                                await settingsAPI.set(key, availableBalanceDraft[currency])
+                                setAvailableBalances({ ...availableBalances, [currency]: availableBalanceDraft[currency] })
+                                setAvailableBalanceEdit({ ...availableBalanceEdit, [currency]: false })
+                                showToast(`${currency} balance saved!`, "success")
+                              } catch {
+                                showToast("Failed to save balance", "error")
+                              }
+                            }}
+                            className="p-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex-shrink-0"
+                            title="Save"
+                          >
+                            <Check className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-sm font-semibold text-gray-800">
+                          {availableBalances[currency] ? `${currencySymbols[currency]}${Number(availableBalances[currency]).toFixed(2)}` : "—"}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Summary Cards - commented out */}
@@ -357,60 +424,64 @@ export default function ShopExpensesPage() {
           </div>
         </div> */}
 
-        {/* Currency Breakdown and Summary Cards - hidden */}
-        {false && (
-          <div>
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="text-center">
-                  <p className="text-sm font-medium text-gray-600">Total Cash</p>
-                  <p className="text-2xl font-bold">
-                    {getCurrencySymbol(displayCurrency)}{getTotalCash().toFixed(2)}
-                  </p>
+        {/* Currency Breakdown and Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-600">Total Cash</p>
+              <p className="text-2xl font-bold">
+                {getCurrencySymbol(displayCurrency)}{getTotalCash().toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-md font-medium text-green-600 mb-3">Income by Currency</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-blue-600">USD Income</p>
+                  <p className="text-xl font-bold text-blue-700">${getCurrencyBreakdown().income.USD.toFixed(2)}</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-green-600">PKR Income</p>
+                  <p className="text-xl font-bold text-green-700">₨{getCurrencyBreakdown().income.PKR.toFixed(2)}</p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-purple-600">SAR Income</p>
+                  <p className="text-xl font-bold text-purple-700">ر.س{getCurrencyBreakdown().income.SAR.toFixed(2)}</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-orange-600">CNY Income</p>
+                  <p className="text-xl font-bold text-orange-700">¥{getCurrencyBreakdown().income.CNY.toFixed(2)}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Currency Breakdown</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="text-md font-medium text-green-600 mb-3">Income by Currency</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm font-medium text-blue-600">USD Income</p>
-                      <p className="text-xl font-bold text-blue-700">${getCurrencyBreakdown().income.USD.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <p className="text-sm font-medium text-green-600">PKR Income</p>
-                      <p className="text-xl font-bold text-green-700">₨{getCurrencyBreakdown().income.PKR.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <p className="text-sm font-medium text-purple-600">SAR Income</p>
-                      <p className="text-xl font-bold text-purple-700">ر.س{getCurrencyBreakdown().income.SAR.toFixed(2)}</p>
-                    </div>
-                  </div>
+            <div>
+              <h4 className="text-md font-medium text-red-600 mb-3">Outgoing by Currency</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-blue-600">USD Outgoing</p>
+                  <p className="text-xl font-bold text-blue-700">${getCurrencyBreakdown().outgoing.USD.toFixed(2)}</p>
                 </div>
-                <div>
-                  <h4 className="text-md font-medium text-red-600 mb-3">Outgoing by Currency</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm font-medium text-blue-600">USD Outgoing</p>
-                      <p className="text-xl font-bold text-blue-700">${getCurrencyBreakdown().outgoing.USD.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <p className="text-sm font-medium text-green-600">PKR Outgoing</p>
-                      <p className="text-xl font-bold text-green-700">₨{getCurrencyBreakdown().outgoing.PKR.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <p className="text-sm font-medium text-purple-600">SAR Outgoing</p>
-                      <p className="text-xl font-bold text-purple-700">ر.س{getCurrencyBreakdown().outgoing.SAR.toFixed(2)}</p>
-                    </div>
-                  </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-green-600">PKR Outgoing</p>
+                  <p className="text-xl font-bold text-green-700">₨{getCurrencyBreakdown().outgoing.PKR.toFixed(2)}</p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-purple-600">SAR Outgoing</p>
+                  <p className="text-xl font-bold text-purple-700">ر.س{getCurrencyBreakdown().outgoing.SAR.toFixed(2)}</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-orange-600">CNY Outgoing</p>
+                  <p className="text-xl font-bold text-orange-700">¥{getCurrencyBreakdown().outgoing.CNY.toFixed(2)}</p>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Currency Selector */}
         <div className="bg-white rounded-lg shadow p-4">
@@ -448,11 +519,10 @@ export default function ShopExpensesPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
                 <div className="flex items-center space-x-2 flex-shrink-0">
                   <label className="text-sm font-medium text-gray-700">Date:</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setSelectedDate(value)}
+                    className="text-sm"
                   />
                   {selectedDate && (
                     <button
@@ -621,11 +691,10 @@ export default function ShopExpensesPage() {
                     {indexOfFirstItem + currentItems.length + 1}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap border border-gray-300">
-                    <input
-                      type="date"
+                    <DateInput
                       value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      onChange={(value) => setFormData({ ...formData, date: value })}
+                      className="text-sm"
                     />
                   </td>
                   <td className="px-4 sm:px-6 py-4 border border-gray-300">
@@ -690,6 +759,11 @@ export default function ShopExpensesPage() {
                             const income = Number.parseFloat(formData.income) || 0
                             const outgoingAmount = Number.parseFloat(formData.outgoingAmount) || 0
 
+                            if (income < 0 || outgoingAmount < 0) {
+                              showToast("Income and outgoing amount cannot be negative", "error")
+                              return
+                            }
+
                             const shopExpenseData: ShopExpense = {
                               id: Date.now().toString(),
                               description: formData.description,
@@ -745,11 +819,9 @@ export default function ShopExpensesPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
                     required
                   />
                 </div>
