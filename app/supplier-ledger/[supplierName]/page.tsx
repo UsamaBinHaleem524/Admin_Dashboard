@@ -10,6 +10,7 @@ import { supplierTransactionsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DateInput } from "@/components/ui/date-input"
 import { useRouter, useParams } from "next/navigation"
 import jsPDF from "jspdf"
 import { getCompanyProfile, getDefaultCompanyProfile } from "@/lib/company-profile-utils"
@@ -149,6 +150,11 @@ export default function SupplierDetailPage() {
 
     const debit = Number.parseFloat(formData.debit) || 0
     const credit = Number.parseFloat(formData.credit) || 0
+
+    if (debit < 0 || credit < 0) {
+      showToast("Debit and credit amounts cannot be negative", "error")
+      return
+    }
 
     if (debit === 0 && credit === 0) {
       showToast("Please enter either a debit or credit amount", "error")
@@ -715,11 +721,10 @@ export default function SupplierDetailPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0">
                 <div className="flex items-center space-x-2 flex-shrink-0">
                   <label className="text-sm font-medium text-gray-700">Date:</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setSelectedDate(value)}
+                    className="text-sm"
                   />
                   {selectedDate && (
                     <button
@@ -971,11 +976,9 @@ export default function SupplierDetailPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Date
                   </label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
                     required
                   />
                 </div>
@@ -1004,6 +1007,7 @@ export default function SupplierDetailPage() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={formData.debit}
                     onChange={(e) => setFormData({ ...formData, debit: e.target.value })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
@@ -1017,6 +1021,7 @@ export default function SupplierDetailPage() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={formData.credit}
                     onChange={(e) => setFormData({ ...formData, credit: e.target.value })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"

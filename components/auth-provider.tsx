@@ -7,7 +7,7 @@ import { useToast } from "@/components/toast-provider"
 
 interface AuthContextType {
   isAuthenticated: boolean
-  login: (username: string, password: string) => boolean
+  login: (username: string, password: string) => Promise<boolean>
   logout: () => void
 }
 
@@ -37,16 +37,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, pathname, router, isLoading])
 
-  const login = (username: string, password: string) => {
-    // Simple authentication - in real app, this would be API call
-    if (username === "admin" && password === "admin123") {
-      setIsAuthenticated(true)
-      sessionStorage.setItem("isAuthenticated", "true")
-      showToast("Login successful!", "success")
-      router.push("/dashboard")
-      return true
-    } else {
-      showToast("Invalid credentials!", "error")
+  const login = async (username: string, password: string) => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setIsAuthenticated(true)
+        sessionStorage.setItem("isAuthenticated", "true")
+        sessionStorage.setItem("user", JSON.stringify(data.user))
+        showToast("Login successful!", "success")
+        router.push("/dashboard")
+        return true
+      } else {
+        showToast(data.error || "Invalid credentials!", "error")
+        return false
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      showToast("An error occurred during login", "error")
       return false
     }
   }
@@ -54,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setIsAuthenticated(false)
     sessionStorage.removeItem("isAuthenticated")
+    sessionStorage.removeItem("user")
     showToast("Logged out successfully!", "success")
     router.push("/login")
   }

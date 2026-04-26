@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { salesAPI, khatasAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 import { formatDisplayDate } from "@/lib/utils"
 
 interface Sale {
@@ -50,6 +51,7 @@ export default function SalesPage() {
   const [formData, setFormData] = useState({
     customer: "",
     item: "",
+    items: [] as string[],
     description: "",
     amount: "",
     currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
@@ -148,8 +150,14 @@ export default function SalesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.customer || !formData.item || !formData.description || !formData.amount || !formData.date || !formData.currency) {
+    if (!formData.customer || formData.items.length === 0 || !formData.description || !formData.amount || !formData.date || !formData.currency) {
       showToast("Please fill in all required fields", "error")
+      return
+    }
+
+    const amount = Number.parseFloat(formData.amount) || 0
+    if (amount < 0) {
+      showToast("Amount cannot be negative", "error")
       return
     }
 
@@ -158,12 +166,25 @@ export default function SalesPage() {
       return
     }
 
+    // Validate that sale date is within the Khata's date range
+    const saleDate = new Date(formData.date)
+    const khataStartDate = new Date(activeKhata.startDate)
+    const khataEndDate = new Date(activeKhata.endDate)
+    
+    if (saleDate < khataStartDate || saleDate > khataEndDate) {
+      showToast(
+        `Sale date must be between ${formatDisplayDate(activeKhata.startDate)} and ${formatDisplayDate(activeKhata.endDate)}`,
+        "error"
+      )
+      return
+    }
+
     const saleData: Sale = {
       id: editingSale ? editingSale.id : Date.now().toString(),
       customer: formData.customer,
-      item: formData.item,
+      item: formData.items.join(", "),
       description: formData.description,
-      amount: Number.parseFloat(formData.amount) || 0,
+      amount: amount,
       currency: formData.currency,
       date: formData.date,
       khataId: activeKhata.id,
@@ -188,9 +209,11 @@ export default function SalesPage() {
 
   const handleEdit = (sale: Sale) => {
     setEditingSale(sale)
+    const itemsArray = sale.item ? sale.item.split(", ").map(i => i.trim()) : []
     setFormData({
       customer: sale.customer,
       item: sale.item,
+      items: itemsArray,
       description: sale.description,
       amount: (sale.amount || 0).toString(),
       currency: sale.currency || "USD",
@@ -214,6 +237,7 @@ export default function SalesPage() {
     setFormData({
       customer: "",
       item: "",
+      items: [],
       description: "",
       amount: "",
       currency: "USD",
@@ -455,19 +479,33 @@ export default function SalesPage() {
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
               <h3 className="text-lg font-semibold mb-1">{editingSale ? "Edit Sale" : "Add New Sale"}</h3>
               {activeKhata && (
-                <p className="text-xs text-gray-500 mb-4">
-                  Khata: <span className="font-medium text-green-700">{activeKhata.name}</span>
-                </p>
+                <div className="mb-4">
+                  <p className="text-xs text-gray-500">
+                    Khata: <span className="font-medium text-green-700">{activeKhata.name}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Date Range: <span className="font-medium text-blue-600">
+                      {formatDisplayDate(activeKhata.startDate)} - {formatDisplayDate(activeKhata.endDate)}
+                    </span>
+                  </p>
+                </div>
               )}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    min={activeKhata?.startDate}
+                    max={activeKhata?.endDate}
+                    onChange={(value) => setFormData({ ...formData, date: value })}
+                    className="text-sm"
+                    required
                   />
+                  {activeKhata && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be between {formatDisplayDate(activeKhata.startDate)} and {formatDisplayDate(activeKhata.endDate)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
@@ -480,17 +518,36 @@ export default function SalesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Item *</label>
-                  <select
-                    value={formData.item}
-                    onChange={(e) => setFormData({ ...formData, item: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">Select an item</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.name}>{product.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Items * (Select one or more)</label>
+                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto bg-white">
+                    {products.length === 0 ? (
+                      <p className="text-sm text-gray-500">No products available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {products.map((product) => (
+                          <label key={product.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                            <input
+                              type="checkbox"
+                              checked={formData.items.includes(product.name)}
+                              onChange={(e) => {
+                                const newItems = e.target.checked
+                                  ? [...formData.items, product.name]
+                                  : formData.items.filter(item => item !== product.name)
+                                setFormData({ ...formData, items: newItems })
+                              }}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">{product.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.items.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selected: {formData.items.join(", ")}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
@@ -507,6 +564,7 @@ export default function SalesPage() {
                   <input
                     type="number"
                     step="0.01"
+                    min="0"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     placeholder="Enter amount"
@@ -558,20 +616,25 @@ export default function SalesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={khataForm.startDate}
-                    onChange={(e) => setKhataForm({ ...khataForm, startDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setKhataForm({ ...khataForm, startDate: value })}
+                    placeholder="dd/mm/yyyy"
+                    className="text-sm"
+                    showCalendarIcon={false}
+                    required
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={khataForm.endDate}
-                    onChange={(e) => setKhataForm({ ...khataForm, endDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setKhataForm({ ...khataForm, endDate: value })}
+                    min={khataForm.startDate}
+                    placeholder="dd/mm/yyyy"
+                    className="text-sm"
+                    showCalendarIcon={false}
+                    required
                   />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">

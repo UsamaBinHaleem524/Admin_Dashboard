@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast-provider"
 import { purchasesAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 import { formatDisplayDate } from "@/lib/utils"
 
 interface Purchase {
@@ -39,6 +40,7 @@ export default function PurchasesPage() {
   const [formData, setFormData] = useState({
     supplier: "",
     item: "",
+    items: [] as string[],
     description: "",
     amount: "",
     currency: "USD" as "USD" | "PKR" | "SAR" | "CNY",
@@ -102,17 +104,21 @@ export default function PurchasesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.supplier || !formData.item || !formData.description || !formData.amount || !formData.date || !formData.currency) {
+    if (!formData.supplier || formData.items.length === 0 || !formData.description || !formData.amount || !formData.date || !formData.currency) {
       showToast("Please fill in all required fields", "error")
       return
     }
 
     const amount = Number.parseFloat(formData.amount) || 0
+    if (amount < 0) {
+      showToast("Amount cannot be negative", "error")
+      return
+    }
 
     const purchaseData: Purchase = {
       id: editingPurchase ? editingPurchase.id : Date.now().toString(),
       supplier: formData.supplier,
-      item: formData.item,
+      item: formData.items.join(", "),
       description: formData.description,
       amount: amount,
       currency: formData.currency,
@@ -139,9 +145,11 @@ export default function PurchasesPage() {
 
   const handleEdit = (purchase: Purchase) => {
     setEditingPurchase(purchase)
+    const itemsArray = purchase.item ? purchase.item.split(", ").map(i => i.trim()) : []
     setFormData({
       supplier: purchase.supplier,
       item: purchase.item,
+      items: itemsArray,
       description: purchase.description,
       amount: (purchase.amount || 0).toString(),
       currency: purchase.currency || "USD",
@@ -173,6 +181,7 @@ export default function PurchasesPage() {
     setFormData({
       supplier: "",
       item: "",
+      items: [],
       description: "",
       amount: "",
       currency: "USD",
@@ -439,12 +448,12 @@ export default function PurchasesPage() {
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date *
                   </label>
-                  <input
+                  <DateInput
                     id="date"
-                    type="date"
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
+                    className="text-sm sm:text-base"
+                    required
                   />
                 </div>
                 <div>
@@ -462,21 +471,37 @@ export default function PurchasesPage() {
                 </div>
                 <div>
                   <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
-                    Item *
+                    Items * (Select one or more)
                   </label>
-                  <select
-                    id="item"
-                    value={formData.item}
-                    onChange={(e) => setFormData({ ...formData, item: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                  >
-                    <option value="">Select an item</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.name}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto bg-white">
+                    {products.length === 0 ? (
+                      <p className="text-sm text-gray-500">No products available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {products.map((product) => (
+                          <label key={product.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                            <input
+                              type="checkbox"
+                              checked={formData.items.includes(product.name)}
+                              onChange={(e) => {
+                                const newItems = e.target.checked
+                                  ? [...formData.items, product.name]
+                                  : formData.items.filter(item => item !== product.name)
+                                setFormData({ ...formData, items: newItems })
+                              }}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">{product.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.items.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selected: {formData.items.join(", ")}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
@@ -499,6 +524,7 @@ export default function PurchasesPage() {
                     id="amount"
                     type="number"
                     step="0.01"
+                    min="0"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     placeholder="Enter amount"

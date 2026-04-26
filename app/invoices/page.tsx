@@ -9,6 +9,7 @@ import { cn, formatDisplayDate } from "@/lib/utils"
 import { invoicesAPI, productsAPI } from "@/lib/api"
 import { DeleteModal } from "@/components/ui/delete-modal"
 import { Pagination } from "@/components/ui/pagination"
+import { DateInput } from "@/components/ui/date-input"
 import jsPDF from "jspdf"
 import { getCompanyProfile, getDefaultCompanyProfile } from "@/lib/company-profile-utils"
 
@@ -245,6 +246,19 @@ export default function InvoicesPage() {
 
     if (!formData.invoiceType || !formData.currency) {
       showToast("Please select an invoice type and currency", "error")
+      return
+    }
+
+    // Validate that no amount fields are negative
+    const hasNegativeValues = formData.items.some(item => {
+      const quantity = Number.parseFloat(item.quantity)
+      const unitPrice = Number.parseFloat(item.unitPrice)
+      const vatPercentage = Number.parseFloat(item.vatPercentage)
+      return quantity < 0 || unitPrice < 0 || vatPercentage < 0
+    })
+
+    if (hasNegativeValues) {
+      showToast("Quantity, unit price, and VAT percentage cannot be negative", "error")
       return
     }
 
@@ -1088,12 +1102,12 @@ export default function InvoicesPage() {
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
                   </label>
-                  <input
+                  <DateInput
                     id="date"
-                    type="date"
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    onChange={(value) => setFormData({ ...formData, date: value })}
+                    className="text-sm"
+                    required
                   />
                 </div>
                 
@@ -1275,6 +1289,7 @@ export default function InvoicesPage() {
                             id={`quantity-${index}`}
                             type="number"
                             step="1"
+                            min="0"
                             value={item.quantity}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                             placeholder="Quantity"
@@ -1304,6 +1319,7 @@ export default function InvoicesPage() {
                             id={`unitPrice-${index}`}
                             type="number"
                             step="0.01"
+                            min="0"
                             value={item.unitPrice}
                             onChange={(e) => handleItemChange(index, "unitPrice", e.target.value)}
                             placeholder="Unit Price"
@@ -1318,6 +1334,7 @@ export default function InvoicesPage() {
                             id={`vatPercentage-${index}`}
                             type="number"
                             step="0.1"
+                            min="0"
                             value={item.vatPercentage}
                             onChange={(e) => handleItemChange(index, "vatPercentage", e.target.value)}
                             placeholder="VAT %"
