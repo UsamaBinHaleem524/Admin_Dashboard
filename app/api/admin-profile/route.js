@@ -1,6 +1,8 @@
 import connectDB from '@/lib/database';
 import User from '@/lib/models/User';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     await connectDB();
@@ -72,10 +74,55 @@ export async function PUT(request) {
     
     // Return user without password
     const updatedUser = adminUser.toJSON();
+    delete updatedUser.password;
     
     return Response.json(updatedUser);
   } catch (error) {
     console.error('Error in PUT /admin-profile:', error);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    await connectDB();
+    const { username, email, currentPassword, newPassword } = await request.json();
+    
+    // Find the admin user
+    const adminUser = await User.findOne({ role: 'admin' });
+    
+    if (!adminUser) {
+      return Response.json({ error: 'Admin user not found' }, { status: 404 });
+    }
+    
+    // If changing password, verify current password
+    if (newPassword) {
+      if (!currentPassword) {
+        return Response.json({ error: 'Current password is required to change password' }, { status: 400 });
+      }
+      
+      const isMatch = await adminUser.comparePassword(currentPassword);
+      if (!isMatch) {
+        return Response.json({ error: 'Current password is incorrect' }, { status: 401 });
+      }
+      
+      // Update password
+      adminUser.password = newPassword;
+    }
+    
+    // Update username and email if provided
+    if (username) adminUser.username = username;
+    if (email) adminUser.email = email;
+    
+    await adminUser.save();
+    
+    // Return user without password
+    const updatedUser = adminUser.toJSON();
+    delete updatedUser.password;
+    
+    return Response.json(updatedUser);
+  } catch (error) {
+    console.error('Error in PATCH /admin-profile:', error);
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
