@@ -3,8 +3,9 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { UserCog, Eye, EyeOff } from "lucide-react"
+import { UserCog, Eye, EyeOff, User, Lock } from "lucide-react"
 import { useToast } from "@/components/toast-provider"
+import { useAuth } from "@/components/auth-provider"
 import { adminProfileAPI } from "@/lib/api"
 
 interface AdminUser {
@@ -14,20 +15,26 @@ interface AdminUser {
   role: string
 }
 
+type TabType = "profile" | "password"
+
 export default function AdminProfilePage() {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabType>("profile")
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [formData, setFormData] = useState({
+  const [profileData, setProfileData] = useState({
     username: "",
     email: "",
+  })
+  const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   })
   const { showToast } = useToast()
+  const { logout } = useAuth()
 
   useEffect(() => {
     loadAdminProfile()
@@ -38,12 +45,9 @@ export default function AdminProfilePage() {
       setLoading(true)
       const data = await adminProfileAPI.get()
       setAdminUser(data)
-      setFormData({
+      setProfileData({
         username: data.username || "",
         email: data.email || "",
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
       })
     } catch (error) {
       showToast("Failed to load admin profile", "error")
@@ -53,74 +57,92 @@ export default function AdminProfilePage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     // Validate username
-    if (!formData.username || formData.username.trim().length < 3) {
+    if (!profileData.username || profileData.username.trim().length < 3) {
       showToast("Username must be at least 3 characters", "error")
       return
     }
 
     // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!formData.email || !emailRegex.test(formData.email)) {
+    if (!profileData.email || !emailRegex.test(profileData.email)) {
       showToast("Please enter a valid email address", "error")
       return
-    }
-
-    // If changing password, validate
-    if (formData.newPassword || formData.currentPassword) {
-      if (!formData.currentPassword) {
-        showToast("Please enter your current password", "error")
-        return
-      }
-
-      if (!formData.newPassword) {
-        showToast("Please enter a new password", "error")
-        return
-      }
-
-      if (formData.newPassword.length < 6) {
-        showToast("New password must be at least 6 characters", "error")
-        return
-      }
-
-      if (formData.newPassword !== formData.confirmPassword) {
-        showToast("New password and confirm password do not match", "error")
-        return
-      }
     }
 
     try {
       setLoading(true)
       
-      const updateData: any = {
-        username: formData.username,
-        email: formData.email,
-      }
-
-      // Only include password fields if changing password
-      if (formData.newPassword) {
-        updateData.currentPassword = formData.currentPassword
-        updateData.newPassword = formData.newPassword
-      }
-
-      await adminProfileAPI.update(updateData)
-      showToast("Admin profile updated successfully!", "success")
+      await adminProfileAPI.update({
+        username: profileData.username,
+        email: profileData.email,
+      })
       
-      // Reload profile and clear password fields
+      showToast("Profile information updated successfully!", "success")
       await loadAdminProfile()
-      setFormData(prev => ({
-        ...prev,
+    } catch (error: any) {
+      showToast(error.message || "Failed to update profile information", "error")
+      console.error("Error updating profile:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Validate current password
+    if (!passwordData.currentPassword) {
+      showToast("Please enter your current password", "error")
+      return
+    }
+
+    // Validate new password
+    if (!passwordData.newPassword) {
+      showToast("Please enter a new password", "error")
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      showToast("New password must be at least 6 characters", "error")
+      return
+    }
+
+    // Validate confirm password
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      showToast("New password and confirm password do not match", "error")
+      return
+    }
+
+    try {
+      setLoading(true)
+      
+      await adminProfileAPI.update({
+        username: adminUser?.username,
+        email: adminUser?.email,
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      })
+      
+      showToast("Password updated successfully! Logging out...", "success")
+      
+      // Clear password fields
+      setPasswordData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
-      }))
+      })
+
+      // Log out after 1.5 seconds to show the success message
+      setTimeout(() => {
+        logout()
+      }, 1500)
     } catch (error: any) {
-      showToast(error.message || "Failed to update admin profile", "error")
-      console.error("Error updating admin profile:", error)
-    } finally {
+      showToast(error.message || "Failed to update password", "error")
+      console.error("Error updating password:", error)
       setLoading(false)
     }
   }
@@ -166,131 +188,181 @@ export default function AdminProfilePage() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {/* Account Information Section */}
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Username *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter username"
-                    required
-                    minLength={3}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter email"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Change Password Section */}
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Change Password</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Leave password fields empty if you don't want to change your password
-              </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showCurrentPassword ? "text" : "password"}
-                      value={formData.currentPassword}
-                      onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter current password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showNewPassword ? "text" : "password"}
-                      value={formData.newPassword}
-                      onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter new password"
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Confirm New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={formData.confirmPassword}
-                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Confirm new password"
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex justify-end pt-4 border-t">
+          {/* Tabs */}
+          <div className="border-b">
+            <div className="flex">
               <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                onClick={() => setActiveTab("profile")}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${
+                  activeTab === "profile"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
               >
-                {loading ? "Updating..." : "Update Profile"}
+                <User className="h-4 w-4" />
+                Profile Information
+              </button>
+              <button
+                onClick={() => setActiveTab("password")}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors ${
+                  activeTab === "password"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <Lock className="h-4 w-4" />
+                Change Password
               </button>
             </div>
-          </form>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Profile Information Tab */}
+            {activeTab === "profile" && (
+              <form onSubmit={handleProfileSubmit} className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Username *
+                      </label>
+                      <input
+                        type="text"
+                        value={profileData.username}
+                        onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter username"
+                        required
+                        minLength={3}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email *
+                      </label>
+                      <input
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter email"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {loading ? "Updating..." : "Update Profile"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Change Password Tab */}
+            {activeTab === "password" && (
+              <form onSubmit={handlePasswordSubmit} className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Change Password</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Enter your current password and choose a new password
+                  </p>
+                  
+                  <div className="space-y-4 max-w-md">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Current Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCurrentPassword ? "text" : "password"}
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Enter current password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        New Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? "text" : "password"}
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Enter new password"
+                          required
+                          minLength={6}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">Must be at least 6 characters</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Confirm New Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Confirm new password"
+                          required
+                          minLength={6}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {loading ? "Updating..." : "Update Password"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
 
         {/* Security Notice */}

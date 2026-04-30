@@ -19,6 +19,10 @@ yarn-error.log*
 # env files
 .env*
 
+# backups
+/backups
+backups/
+
 # vercel
 .vercel
 
