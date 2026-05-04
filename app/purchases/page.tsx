@@ -38,6 +38,7 @@ export default function PurchasesPage() {
   const [khatas, setKhatas] = useState<Khata[]>([])
   const [selectedKhataId, setSelectedKhataId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedYear, setSelectedYear] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -71,7 +72,7 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedKhataId])
+  }, [searchTerm, selectedKhataId, selectedYear])
 
   const loadData = async () => {
     try {
@@ -113,8 +114,26 @@ export default function PurchasesPage() {
   const selectedKhata = khatas.find((k) => k.id === selectedKhataId) || null
   const isSelectedKhataClosed = selectedKhata?.status === "closed"
 
+  // Get available years from purchases data
+  const getAvailableYears = () => {
+    const years = new Set<string>()
+    purchases.forEach((purchase) => {
+      const year = new Date(purchase.date).getFullYear().toString()
+      years.add(year)
+    })
+    return Array.from(years).sort((a, b) => Number(b) - Number(a))
+  }
+  const availableYears = getAvailableYears()
+
   const khatasPurchases = purchases.filter((p) => p.khataId === selectedKhataId)
   const filteredPurchases = khatasPurchases.filter((purchase) => {
+    // Year filter
+    if (selectedYear !== "all") {
+      const purchaseYear = new Date(purchase.date).getFullYear().toString()
+      if (purchaseYear !== selectedYear) return false
+    }
+
+    // Search filter
     if (!searchTerm) return true
     return (
       purchase.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -389,15 +408,32 @@ export default function PurchasesPage() {
                   )}
                 </h3>
               </div>
-              <div className="flex items-center space-x-2">
-                <Search className="h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by supplier, item, description, or date..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="sm:max-w-[32%] flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex items-center space-x-2 flex-1">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by supplier, item, description, or date..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Year:</label>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-[120px]"
+                  >
+                    <option value="all">All Years</option>
+                    {availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
             <div className="overflow-x-auto">
