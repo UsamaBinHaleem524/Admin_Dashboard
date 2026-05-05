@@ -49,6 +49,10 @@ export default function PurchasesPage() {
     isOpen: false,
     purchase: null,
   })
+  const [deleteKhataModal, setDeleteKhataModal] = useState<{ isOpen: boolean; khata: Khata | null }>({
+    isOpen: false,
+    khata: null,
+  })
   const [formData, setFormData] = useState({
     supplier: "",
     item: "",
@@ -180,22 +184,30 @@ export default function PurchasesPage() {
       return
     }
 
-    if (!activeKhata) {
+    // For new purchases, require an active khata
+    if (!editingPurchase && !activeKhata) {
       showToast("No active Khata found. Please create a Khata first.", "error")
       return
     }
 
     // Validate that purchase date is within the Khata's date range
-    const purchaseDate = new Date(formData.date)
-    const khataStartDate = new Date(activeKhata.startDate)
-    const khataEndDate = new Date(activeKhata.endDate)
+    // When editing, use the original khata; when creating, use the active khata
+    const targetKhata = editingPurchase 
+      ? khatas.find(k => k.id === editingPurchase.khataId) 
+      : activeKhata
     
-    if (purchaseDate < khataStartDate || purchaseDate > khataEndDate) {
-      showToast(
-        `Purchase date must be between ${formatDisplayDate(activeKhata.startDate)} and ${formatDisplayDate(activeKhata.endDate)}`,
-        "error"
-      )
-      return
+    if (targetKhata) {
+      const purchaseDate = new Date(formData.date)
+      const khataStartDate = new Date(targetKhata.startDate)
+      const khataEndDate = new Date(targetKhata.endDate)
+      
+      if (purchaseDate < khataStartDate || purchaseDate > khataEndDate) {
+        showToast(
+          `Purchase date must be between ${formatDisplayDate(targetKhata.startDate)} and ${formatDisplayDate(targetKhata.endDate)}`,
+          "error"
+        )
+        return
+      }
     }
 
     const purchaseData: Purchase = {
@@ -206,7 +218,8 @@ export default function PurchasesPage() {
       amount: amount,
       currency: formData.currency,
       date: formData.date,
-      khataId: activeKhata.id,
+      // Keep the original khataId when editing, use activeKhata for new purchases
+      khataId: editingPurchase ? editingPurchase.khataId : activeKhata.id,
     }
 
     try {
@@ -284,6 +297,42 @@ export default function PurchasesPage() {
     }
   }
 
+  const handleDeleteKhataClick = (khata: Khata) => {
+    // Check if there are any purchases associated with this khata
+    const khataPurchases = purchases.filter((purchase) => purchase.khataId === khata.id)
+    
+    if (khataPurchases.length > 0) {
+      showToast("Please first delete all purchases in this Khata, then you can delete the Khata", "error")
+      return
+    }
+    
+    // If no purchases, show confirmation modal
+    setDeleteKhataModal({ isOpen: true, khata })
+  }
+
+  const handleDeleteKhata = async () => {
+    if (!deleteKhataModal.khata) return
+    
+    try {
+      await purchaseKhatasAPI.delete(deleteKhataModal.khata.id)
+      showToast("Khata deleted successfully!", "success")
+      setDeleteKhataModal({ isOpen: false, khata: null })
+      await loadData()
+      
+      // Select another khata if the deleted one was selected
+      if (selectedKhataId === deleteKhataModal.khata.id) {
+        setSelectedKhataId(null)
+      }
+    } catch (error) {
+      showToast("Failed to delete Khata", "error")
+      console.error("Error deleting khata:", error)
+    }
+  }
+
+  const closeDeleteKhataModal = () => {
+    setDeleteKhataModal({ isOpen: false, khata: null })
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6 px-4 sm:px-6 lg:px-0">
@@ -345,25 +394,33 @@ export default function PurchasesPage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Select Khata to View</h3>
             <div className="flex flex-wrap gap-2">
               {khatas.map((khata) => (
-                <button
-                  key={khata.id}
-                  onClick={() => setSelectedKhataId(khata.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    selectedKhataId === khata.id
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  {khata.status === "closed" && <Lock className="h-3 w-3" />}
-                  {khata.name}
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                    khata.status === "active"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-200 text-gray-500"
-                  }`}>
-                    {khata.status}
-                  </span>
-                </button>
+                <div key={khata.id} className="flex items-center gap-1 group">
+                  <button
+                    onClick={() => setSelectedKhataId(khata.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      selectedKhataId === khata.id
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {khata.status === "closed" && <Lock className="h-3 w-3" />}
+                    {khata.name}
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                      khata.status === "active"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-200 text-gray-500"
+                    }`}>
+                      {khata.status}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteKhataClick(khata)}
+                    className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                    title="Delete Khata"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -446,19 +503,17 @@ export default function PurchasesPage() {
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Currency</th>
-                    {!isSelectedKhataClosed && (
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    )}
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={isSelectedKhataClosed ? 6 : 7} className="px-6 py-8 text-center text-gray-500 text-sm">Loading...</td>
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">Loading...</td>
                     </tr>
                   ) : currentItems.length === 0 ? (
                     <tr>
-                      <td colSpan={isSelectedKhataClosed ? 6 : 7} className="px-6 py-8 text-center text-gray-500 text-sm">
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">
                         No purchase records in this Khata
                       </td>
                     </tr>
@@ -473,18 +528,16 @@ export default function PurchasesPage() {
                           {getCurrencySymbol(purchase.currency)}{(purchase.amount || 0).toFixed(2)}
                         </td>
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-gray-500 text-sm">{purchase.currency}</td>
-                        {!isSelectedKhataClosed && (
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                            <div className="flex space-x-2">
-                              <button onClick={() => handleEdit(purchase)} className="p-1 text-blue-600 hover:text-blue-800">
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button onClick={() => setDeleteModal({ isOpen: true, purchase })} className="p-1 text-red-600 hover:text-red-800">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </td>
-                        )}
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                          <div className="flex space-x-2">
+                            <button onClick={() => handleEdit(purchase)} className="p-1 text-blue-600 hover:text-blue-800">
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => setDeleteModal({ isOpen: true, purchase })} className="p-1 text-red-600 hover:text-red-800">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -514,34 +567,54 @@ export default function PurchasesPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex !mt-0 items-center justify-center z-50 px-4">
             <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
               <h3 className="text-lg font-semibold mb-1">{editingPurchase ? "Edit Purchase" : "Add New Purchase"}</h3>
-              {activeKhata && (
-                <div className="mb-4">
-                  <p className="text-xs text-gray-500">
-                    Khata: <span className="font-medium text-green-700">{activeKhata.name}</span>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Date Range: <span className="font-medium text-blue-600">
-                      {formatDisplayDate(activeKhata.startDate)} - {formatDisplayDate(activeKhata.endDate)}
-                    </span>
-                  </p>
-                </div>
-              )}
+              {(() => {
+                // Show the khata that the purchase belongs to when editing, otherwise show active khata
+                const displayKhata = editingPurchase 
+                  ? khatas.find(k => k.id === editingPurchase.khataId)
+                  : activeKhata
+                
+                return displayKhata && (
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-500">
+                      Khata: <span className={`font-medium ${displayKhata.status === 'active' ? 'text-green-700' : 'text-gray-600'}`}>
+                        {displayKhata.name}
+                      </span>
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Date Range: <span className="font-medium text-blue-600">
+                        {formatDisplayDate(displayKhata.startDate)} - {formatDisplayDate(displayKhata.endDate)}
+                      </span>
+                    </p>
+                  </div>
+                )
+              })()}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
-                  <DateInput
-                    value={formData.date}
-                    min={activeKhata?.startDate}
-                    max={activeKhata?.endDate}
-                    onChange={(value) => setFormData({ ...formData, date: value })}
-                    className="text-sm"
-                    required
-                  />
-                  {activeKhata && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Must be between {formatDisplayDate(activeKhata.startDate)} and {formatDisplayDate(activeKhata.endDate)}
-                    </p>
-                  )}
+                  {(() => {
+                    // Use the correct khata for date validation
+                    const targetKhata = editingPurchase 
+                      ? khatas.find(k => k.id === editingPurchase.khataId)
+                      : activeKhata
+                    
+                    return (
+                      <>
+                        <DateInput
+                          value={formData.date}
+                          min={targetKhata?.startDate}
+                          max={targetKhata?.endDate}
+                          onChange={(value) => setFormData({ ...formData, date: value })}
+                          className="text-sm"
+                          required
+                        />
+                        {targetKhata && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Must be between {formatDisplayDate(targetKhata.startDate)} and {formatDisplayDate(targetKhata.endDate)}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Supplier *</label>
@@ -687,6 +760,15 @@ export default function PurchasesPage() {
           onConfirm={() => deleteModal.purchase && handleDelete(deleteModal.purchase.id)}
           title="Delete Purchase"
           message="Are you sure you want to delete this purchase? This action cannot be undone."
+        />
+
+        {/* Delete Khata Modal */}
+        <DeleteModal
+          isOpen={deleteKhataModal.isOpen}
+          onClose={closeDeleteKhataModal}
+          onConfirm={handleDeleteKhata}
+          title="Delete Khata"
+          message={`Are you sure you want to delete the Khata "${deleteKhataModal.khata?.name}"? This action cannot be undone.`}
         />
       </div>
     </DashboardLayout>

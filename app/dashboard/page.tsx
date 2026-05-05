@@ -46,10 +46,11 @@ export default function DashboardPage() {
   })
   const [loading, setLoading] = useState(true)
   const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "PKR" | "SAR" | "CNY">("USD")
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
 
   useEffect(() => {
     loadDashboardData()
-  }, [])
+  }, [selectedYear])
 
   const loadDashboardData = async () => {
     try {
@@ -59,15 +60,26 @@ export default function DashboardPage() {
         purchasesAPI.getAll(),
       ])
 
+      // Filter data by selected year
+      const filteredSales = salesData.filter((sale: Sale) => {
+        const saleYear = new Date(sale.date).getFullYear().toString()
+        return saleYear === selectedYear
+      })
+
+      const filteredPurchases = purchasesData.filter((purchase: Purchase) => {
+        const purchaseYear = new Date(purchase.date).getFullYear().toString()
+        return purchaseYear === selectedYear
+      })
+
       // Calculate total sales by currency
       const totalSales: Record<string, number> = { USD: 0, PKR: 0, SAR: 0, CNY: 0 }
-      salesData.forEach((sale: Sale) => {
+      filteredSales.forEach((sale: Sale) => {
         totalSales[sale.currency] = (totalSales[sale.currency] || 0) + sale.amount
       })
 
       // Calculate total purchases by currency
       const totalPurchases: Record<string, number> = { USD: 0, PKR: 0, SAR: 0, CNY: 0 }
-      purchasesData.forEach((purchase: Purchase) => {
+      filteredPurchases.forEach((purchase: Purchase) => {
         totalPurchases[purchase.currency] = (totalPurchases[purchase.currency] || 0) + purchase.amount
       })
 
@@ -78,11 +90,11 @@ export default function DashboardPage() {
       })
 
       // Get unique customers and suppliers
-      const uniqueCustomers = new Set(salesData.map((s: Sale) => s.customer))
-      const uniqueSuppliers = new Set(purchasesData.map((p: Purchase) => p.supplier))
+      const uniqueCustomers = new Set(filteredSales.map((s: Sale) => s.customer))
+      const uniqueSuppliers = new Set(filteredPurchases.map((p: Purchase) => p.supplier))
 
-      // Prepare monthly data for last 6 months
-      const monthlySalesData = prepareMonthlyData(salesData, purchasesData)
+      // Prepare monthly data for selected year
+      const monthlySalesData = prepareMonthlyData(filteredSales, filteredPurchases, selectedYear)
 
       // Currency distribution for pie chart
       const currencyDistribution = [
@@ -108,15 +120,14 @@ export default function DashboardPage() {
     }
   }
 
-  const prepareMonthlyData = (sales: Sale[], purchases: Purchase[]) => {
+  const prepareMonthlyData = (sales: Sale[], purchases: Purchase[], year: string) => {
     const monthlyData: Record<string, any> = {}
     const months = []
     
-    // Get last 6 months
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date()
-      date.setMonth(date.getMonth() - i)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    // Get all 12 months of the selected year
+    for (let i = 0; i < 12; i++) {
+      const monthKey = `${year}-${String(i + 1).padStart(2, '0')}`
+      const date = new Date(parseInt(year), i, 1)
       const monthName = date.toLocaleDateString('en-US', { month: 'short' })
       
       monthlyData[monthKey] = {
@@ -179,23 +190,46 @@ export default function DashboardPage() {
           <p className="text-gray-600">Business Overview</p>
         </div>
 
-        {/* Currency Selector */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">Currency:</span>
-          <div className="flex gap-2">
-            {(["USD", "PKR", "SAR", "CNY"] as const).map((currency) => (
-              <button
-                key={currency}
-                onClick={() => setSelectedCurrency(currency)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  selectedCurrency === currency
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
+        {/* Filters Section */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Year Filter */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">Year:</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
               >
-                {currency}
-              </button>
-            ))}
+                <option value="2020">2020</option>
+                <option value="2021">2021</option>
+                <option value="2022">2022</option>
+                <option value="2023">2023</option>
+                <option value="2024">2024</option>
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+              </select>
+            </div>
+
+            {/* Currency Selector */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">Currency:</span>
+              <div className="flex gap-2">
+                {(["USD", "PKR", "SAR", "CNY"] as const).map((currency) => (
+                  <button
+                    key={currency}
+                    onClick={() => setSelectedCurrency(currency)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      selectedCurrency === currency
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {currency}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -255,8 +289,8 @@ export default function DashboardPage() {
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip 
-                  formatter={(value: number) => [
-                    `${getCurrencySymbol(selectedCurrency)}${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                  formatter={(value: any) => [
+                    `${getCurrencySymbol(selectedCurrency)}${(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                     ''
                   ]}
                 />
@@ -276,8 +310,8 @@ export default function DashboardPage() {
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip 
-                  formatter={(value: number) => [
-                    `${getCurrencySymbol(selectedCurrency)}${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                  formatter={(value: any) => [
+                    `${getCurrencySymbol(selectedCurrency)}${(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
                     'Sales'
                   ]}
                 />
