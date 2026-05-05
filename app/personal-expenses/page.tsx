@@ -53,6 +53,24 @@ export default function PersonalExpensesPage() {
     SAR: string
     CNY: string
   }>({ USD: "", PKR: "", SAR: "", CNY: "" })
+  const [previousBalances, setPreviousBalances] = useState<{
+    USD: string
+    PKR: string
+    SAR: string
+    CNY: string
+  }>({ USD: "", PKR: "", SAR: "", CNY: "" })
+  const [previousBalanceEdit, setPreviousBalanceEdit] = useState<{
+    USD: boolean
+    PKR: boolean
+    SAR: boolean
+    CNY: boolean
+  }>({ USD: false, PKR: false, SAR: false, CNY: false })
+  const [previousBalanceDraft, setPreviousBalanceDraft] = useState<{
+    USD: string
+    PKR: string
+    SAR: string
+    CNY: string
+  }>({ USD: "", PKR: "", SAR: "", CNY: "" })
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -79,6 +97,7 @@ export default function PersonalExpensesPage() {
   // Load available balances when selected date changes
   useEffect(() => {
     loadAvailableBalances()
+    loadPreviousBalances()
   }, [selectedDate])
 
   const loadAvailableBalances = async () => {
@@ -100,6 +119,27 @@ export default function PersonalExpensesPage() {
     }
     
     setAvailableBalances(balances)
+  }
+
+  const loadPreviousBalances = async () => {
+    if (!selectedDate) return
+    
+    const currencies: Array<'USD' | 'PKR' | 'SAR' | 'CNY'> = ['USD', 'PKR', 'SAR', 'CNY']
+    const balances = { USD: "", PKR: "", SAR: "", CNY: "" }
+    
+    for (const currency of currencies) {
+      try {
+        const key = `personalPreviousBalance_${selectedDate}_${currency}`
+        const result = await settingsAPI.get(key)
+        if (result?.value) {
+          balances[currency] = result.value
+        }
+      } catch {
+        // Balance doesn't exist for this date/currency combination
+      }
+    }
+    
+    setPreviousBalances(balances)
   }
 
   useEffect(() => {
@@ -432,6 +472,81 @@ export default function PersonalExpensesPage() {
                       ) : (
                         <div className="text-sm font-semibold text-gray-800">
                           {availableBalances[currency] ? `${currencySymbols[currency]}${Number(availableBalances[currency]).toFixed(2)}` : "—"}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Previous Balances for Selected Date */}
+          {selectedDate && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">
+                  Previous Balance for {formatDisplayDate(selectedDate)}
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {(['USD', 'PKR', 'SAR', 'CNY'] as const).map((currency) => {
+                  const currencySymbols = { USD: "$", PKR: "₨", SAR: "ر.س", CNY: "¥" }
+                  return (
+                    <div key={currency} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-gray-600">{currency}</label>
+                        {!previousBalanceEdit[currency] && (
+                          <button
+                            onClick={() => {
+                              setPreviousBalanceDraft({ ...previousBalanceDraft, [currency]: previousBalances[currency] })
+                              setPreviousBalanceEdit({ ...previousBalanceEdit, [currency]: true })
+                            }}
+                            className="text-blue-600 hover:text-blue-800 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      {previousBalanceEdit[currency] ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={previousBalanceDraft[currency]}
+                            onChange={(e) => setPreviousBalanceDraft({ ...previousBalanceDraft, [currency]: e.target.value })}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1 text-sm border border-blue-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={async () => {
+                              try {
+                                const balance = Number.parseFloat(previousBalanceDraft[currency])
+                                if (balance < 0) {
+                                  showToast("Balance cannot be negative", "error")
+                                  return
+                                }
+                                const key = `personalPreviousBalance_${selectedDate}_${currency}`
+                                await settingsAPI.set(key, previousBalanceDraft[currency])
+                                setPreviousBalances({ ...previousBalances, [currency]: previousBalanceDraft[currency] })
+                                setPreviousBalanceEdit({ ...previousBalanceEdit, [currency]: false })
+                                showToast(`${currency} previous balance saved!`, "success")
+                              } catch {
+                                showToast("Failed to save previous balance", "error")
+                              }
+                            }}
+                            className="p-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex-shrink-0"
+                            title="Save"
+                          >
+                            <Check className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-sm font-semibold text-gray-800">
+                          {previousBalances[currency] ? `${currencySymbols[currency]}${Number(previousBalances[currency]).toFixed(2)}` : "—"}
                         </div>
                       )}
                     </div>
